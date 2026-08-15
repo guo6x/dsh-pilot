@@ -13,7 +13,9 @@
 ## 安装
 
 ```sh
-dsh plugin --profile web add github:guo6x/dsh-pilot
+dsh plugin --profile web add dsh-pilot
+# 或从 GitHub 直装（同一份代码，锁定 commit）：
+# dsh plugin --profile web add github:guo6x/dsh-pilot
 ```
 
 重启 `dsh web`、刷新页面，侧边栏底部出现 ✈️ 按钮，点开即是驾驶舱。

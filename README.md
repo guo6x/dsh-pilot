@@ -13,7 +13,9 @@ Drive a **real browser** from the DeepSeek Harness chat: the agent opens pages, 
 ## Install
 
 ```sh
-dsh plugin --profile web add github:guo6x/dsh-pilot
+dsh plugin --profile web add dsh-pilot
+# or straight from GitHub (same code, pinned to a commit):
+# dsh plugin --profile web add github:guo6x/dsh-pilot
 ```
 
 Restart `dsh web`, refresh the page. A ✈️ button appears at the sidebar foot — that opens the cockpit.
