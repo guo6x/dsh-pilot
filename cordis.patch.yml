@@ -1,0 +1,4 @@
+# dsh-pilot bundle layer: mount the browser-control plugin.
+- insert:
+    - id: pilot
+      name: 'dsh-pilot'
