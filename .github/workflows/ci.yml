@@ -1,0 +1,23 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pnpm
+        run: npm install -g pnpm@11
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: node build.mjs
+      - name: Smoke test (real headless Edge)
+        run: node tests/smoke.mjs
