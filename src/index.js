@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 export const name = 'dsh-pilot'
-export const inject = []
+export const inject = ['webServer', 'tools']
 
 const LOOPBACKS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const EDGE_CANDIDATES = [
@@ -455,7 +455,7 @@ export function apply(ctx) {
   const pilot = new Pilot()
 
   // ---- loopback HTTP API for the cockpit panel ----
-  const webServer = ctx.get('webServer')
+  const webServer = ctx.webServer
   if (webServer !== undefined) {
     ctx.effect(() => webServer.register({
       kind: 'prefix',
@@ -504,7 +504,7 @@ export function apply(ctx) {
   }
 
   // ---- agent tools ----
-  const tools = ctx.get('tools')
+  const tools = ctx.tools
   if (tools !== undefined) {
     const define = (nameValue, description, parameters, execute, render) => ({
       name: nameValue,

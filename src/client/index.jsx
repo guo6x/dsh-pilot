@@ -5,7 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 
 export const name = 'dsh-pilot'
-export const inject = []
+export const inject = ['slots']
 
 const POLL_MS = 2000
 
