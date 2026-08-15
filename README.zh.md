@@ -2,13 +2,16 @@
 
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com) [English](README.md) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件
 
-让 agent 在 DSH 对话里**操控真实浏览器**：打开网页、把页面当结构化文本读、点击、输入、按键、执行 JS、截图——你在 Web GUI 的可拖拽**驾驶舱面板**里实时围观，随时接管。
+让 agent 在 DSH 对话里**操控真实浏览器**：打开网页、把页面当结构化文本读（带**编号元素列表**）、按**编号**点击输入（不用猜 CSS）、按键、后退/刷新/等待、执行 JS、截图——你在 Web GUI 的可拖拽**驾驶舱面板**里实时围观，随时接管。
 
 - 🚀 **一条命令安装** —— `dsh plugin --profile web add github:guo6x/dsh-pilot`
 - ⚡ **零运行时依赖** —— 走 Node ≥ 22 原生 WebSocket 直连 CDP，用你机器上已有的 Edge/Chrome
 - 🔑 **无需 API key** —— 什么都不出本机，不需要视觉模型
-- 📖 **文本优先设计** —— agent 读的是 DOM 快照（标题/URL/正文/链接），**纯文本模型**照样上网，不烧视觉 token
-- 👀 **人在环中** —— 驾驶舱实时截图、地址栏、操作日志，agent 的一举一动都看得见
+- 📖 **文本优先设计** —— agent 读的是 DOM 快照（标题/URL/正文/链接 + 编号元素），**纯文本模型**照样上网，不烧视觉 token
+- 🎯 **按编号交互** —— 点击/输入全部指向快照编号，过期编号报错并提示重取快照
+- 🧭 **完整导航套件** —— 后退、刷新、等待工具 + 内置页面落定等待，真实上网流程全覆盖
+- 👀 **人在环中** —— 驾驶舱实时截图、地址栏、操作日志、会话指示，agent 的一举一动都看得见
+- 🧩 **按会话隔离** —— 每个 agent 会话独立浏览器，并行会话互不抢页面
 
 ## 安装
 

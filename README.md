@@ -2,13 +2,16 @@
 
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com) [中文说明](README.zh.md) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin
 
-Drive a **real browser** from the DeepSeek Harness chat: the agent opens pages, reads them as structured text, clicks, types, presses keys, evaluates JS, and takes screenshots — while you watch a live draggable **cockpit panel** in the Web GUI and can take over at any time.
+Drive a **real browser** from the DeepSeek Harness chat: the agent opens pages, reads them as structured text with a **numbered element list**, clicks and types **by ref** (no CSS guessing), presses keys, navigates back/reload, waits, evaluates JS, and takes screenshots — while you watch a live draggable **cockpit panel** in the Web GUI and can take over at any time.
 
 - 🚀 **One command install** — `dsh plugin --profile web add github:guo6x/dsh-pilot`
 - ⚡ **Zero runtime dependencies** — talks CDP over the native Node ≥ 22 WebSocket, uses the Edge/Chrome already on your machine
 - 🔑 **No API key** — nothing leaves your machine; no vision model required
-- 📖 **Text-first by design** — the agent reads DOM snapshots (title/URL/text/links), so **text-only models** browse without burning vision tokens
-- 👀 **Human in the loop** — live screenshot, URL bar, and action log in the cockpit; you see everything the agent does
+- 📖 **Text-first by design** — the agent reads DOM snapshots (title/URL/text/links + numbered elements), so **text-only models** browse without burning vision tokens
+- 🎯 **Ref-driven interaction** — every click/type targets a snapshot ref, not a guessed selector; stale refs fail loudly with a hint
+- 🧭 **Full navigation set** — back, reload, and wait tools for real browsing flows, with page-settling waits built in
+- 👀 **Human in the loop** — live screenshot, URL bar, action log, and a session indicator in the cockpit; you see everything the agent does
+- 🧩 **Per-session isolation** — every agent session gets its own browser instance; parallel sessions never fight over one page
 
 ## Install
 
