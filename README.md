@@ -33,6 +33,9 @@ Requirements: DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome inst
 | `pilot_click` | Click an element **by its snapshot ref** (or CSS selector); scrolls into view first |
 | `pilot_type` | Type into an input **by its snapshot ref** (or selector) via the native value setter — React/Vue forms observe it |
 | `pilot_press` | Press a key (Enter/Tab/Escape/arrows/single chars) |
+| `pilot_back` | Go back in history, waits for the page to settle, returns URL/title |
+| `pilot_reload` | Reload the current page, waits for it to settle |
+| `pilot_wait` | Wait N ms (1–30000) for async content before the next action |
 | `pilot_screenshot` | Save a PNG and return its path (for vision-capable models or the human) |
 | `pilot_eval` | Evaluate JS in the page, get JSON back |
 | `pilot_close` | Stop the browser; the next call relaunches it |
@@ -41,7 +44,13 @@ The agent just says what it needs: *"open the login page, fill the form, click s
 
 ## What the human gets
 
-A draggable cockpit overlay: live screenshot (2 s refresh), current URL + title, 启动/关闭 buttons, an address bar, and the recent action log. Everything the agent does is visible; close the browser or take over whenever you like.
+A draggable cockpit overlay: live screenshot (2 s refresh), current URL + title, 启动/关闭 buttons, an address bar, the recent action log, and a session indicator when several sessions are browsing. Everything the agent does is visible; close the browser or take over whenever you like.
+
+## Known limitations
+
+- **One tab per session.** Refs are pinned to the current page, so a tab switcher would invalidate them. Need a second context? Spawn a subagent — each agent session gets its own browser.
+- **Headless only.** The cockpit shows the headless view; there is no headed mode (a human driving the same browser is a different product).
+- **The panel shows the most recently used session's browser.** Each session still owns its own instance — the panel just follows the last one that acted.
 
 ## How it works
 

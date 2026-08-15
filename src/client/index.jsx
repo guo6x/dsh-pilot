@@ -141,6 +141,9 @@ function PilotPanel() {
     React.createElement('div', { style: barStyle },
       React.createElement('span', { style: { fontSize: 13, fontWeight: 700 } }, '🛩️ 浏览器驾驶舱'),
       React.createElement('span', { style: { flex: 1 } }),
+      state?.sessions > 1
+        ? React.createElement('span', { style: { fontSize: 10, opacity: 0.55 }, title: `当前显示最近活跃会话的浏览器，共 ${state.sessions} 个会话` }, `×${state.sessions}`)
+        : null,
       React.createElement('span', { style: { fontSize: 11, opacity: 0.7 } }, state?.status ?? '…'),
       React.createElement('button', { style: btnStyle, onClick: () => setOpen(false), title: '收起' }, '×'),
     ),

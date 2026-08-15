@@ -27,6 +27,17 @@ try {
 
   const clicked = await pilot.click(learnMore.ref)
   check('click by ref: ok', clicked.ok === true && clicked.ref === learnMore.ref, JSON.stringify(clicked).slice(0, 120))
+  check('click: waits for navigation', /iana\.org/.test(clicked.url), clicked.url)
+  check('click: title settled after load', typeof clicked.title === 'string' && clicked.title.length > 0, clicked.title)
+
+  const wentBack = await pilot.back()
+  check('back: returns to previous page', /example\.com/.test(wentBack.url), wentBack.url)
+
+  const reloaded = await pilot.reload()
+  check('reload: keeps url', reloaded.url === wentBack.url, reloaded.url)
+
+  const waited = await pilot.wait(150)
+  check('wait: ok', waited.ok === true && waited.waited === 150, JSON.stringify(waited))
 
   // stale ref after navigation
   const stale = await pilot.click(999)

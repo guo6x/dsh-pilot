@@ -244,7 +244,7 @@ export class Pilot {
   async navigate(url) {
     await this.ensure()
     await this.cdp.call('Page.navigate', { url }, NAV_TIMEOUT_MS)
-    await Promise.race([this.cdp.once('Page.loadEventFired', NAV_TIMEOUT_MS), sleep(NAV_TIMEOUT_MS)])
+    await Promise.race([this.cdp.once('Page.loadEventFired', NAV_TIMEOUT_MS).catch(() => {}), sleep(NAV_TIMEOUT_MS)])
     this.url = url
     this.title = await this.readTitle()
     this.note('nav', url)
@@ -307,8 +307,64 @@ export class Pilot {
     return data
   }
 
+  /** Wait for the next load event or the timeout — lets navigations settle. Never rejects. */
+  async waitForLoad(timeoutMs = 3000) {
+    if (this.cdp === null) return
+    await Promise.race([
+      this.cdp.once('Page.loadEventFired', timeoutMs).catch(() => {}),
+      sleep(timeoutMs),
+    ])
+  }
+
+  /** Pause for async page content to settle. */
+  async wait(ms) {
+    const clamped = Math.max(0, Math.min(30000, Math.round(ms)))
+    await sleep(clamped)
+    this.note('wait', `${clamped}ms`)
+    return { ok: true, waited: clamped }
+  }
+
+  async readUrl() {
+    try {
+      const { result } = await this.cdp.call('Runtime.evaluate', {
+        expression: 'location.href',
+        returnByValue: true,
+      })
+      return typeof result.value === 'string' ? result.value : this.url
+    } catch {
+      return this.url
+    }
+  }
+
+  async back() {
+    await this.ensure()
+    const settling = this.waitForLoad(3000)
+    await this.cdp.call('Runtime.evaluate', { expression: 'history.back()' }, 10000)
+    await settling
+    await sleep(300)
+    this.url = await this.readUrl()
+    this.title = await this.readTitle()
+    this.note('back', this.url)
+    await this.captureShot()
+    return { ok: true, url: this.url, title: this.title }
+  }
+
+  async reload() {
+    await this.ensure()
+    const settling = this.waitForLoad(8000)
+    await this.cdp.call('Page.reload', {}, 15000)
+    await settling
+    await sleep(300)
+    this.url = await this.readUrl()
+    this.title = await this.readTitle()
+    this.note('reload', this.url)
+    await this.captureShot()
+    return { ok: true, url: this.url, title: this.title }
+  }
+
   async click(target) {
     await this.ensure()
+    const settling = this.waitForLoad(2500) // register before the click — the load event may beat us
     const expression = typeof target === 'number'
       ? `(() => {
           const entry = window.__pilotEls && window.__pilotEls[${target} - 1]
@@ -331,9 +387,12 @@ export class Pilot {
     })
     if (exceptionDetails) return { ok: false, error: exceptionDetails.text ?? 'evaluate failed' }
     this.note('click', String(target))
-    await sleep(400)
+    await settling
+    await sleep(300)
+    this.url = await this.readUrl()
+    this.title = await this.readTitle()
     await this.captureShot()
-    return { ...result.value, title: await this.readTitle() }
+    return { ...result.value, url: this.url, title: this.title }
   }
 
   async type(target, text) {
@@ -566,7 +625,7 @@ export function apply(ctx) {
         const pilot = pool.panelPilot()
         try {
           if (req.method === 'GET' && suffix === '/state') {
-            sendJson(res, 200, pilot.state())
+            sendJson(res, 200, { ...pilot.state(), session: pool.primary ?? 'default', sessions: pool.pilots.size })
           } else if (req.method === 'GET' && suffix === '/shot.png') {
             if (pilot.lastShot === null) {
               res.writeHead(204, { 'cache-control': 'no-store' })
@@ -689,6 +748,36 @@ export function apply(ctx) {
           return pilot.withOp(() => pilot.press(args.key))
         },
         value => [{ type: 'text', text: `pressed ${value.key}` }],
+      ),
+      define(
+        'pilot_back',
+        'Go back to the previous page in your session\'s browser history. Returns the resulting URL and title once the page settles.',
+        obj({}),
+        async (_args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.back())
+        },
+        value => [{ type: 'text', text: `back to [${value.title}](${value.url})` }],
+      ),
+      define(
+        'pilot_reload',
+        'Reload the current page in your session\'s browser. Returns the URL and title once the page settles.',
+        obj({}),
+        async (_args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.reload())
+        },
+        value => [{ type: 'text', text: `reloaded [${value.title}](${value.url})` }],
+      ),
+      define(
+        'pilot_wait',
+        'Wait for the page to settle before the next action: async content, animations, or slow JavaScript. Takes milliseconds (1-30000, default 1000).',
+        obj({ ms: { type: 'number', description: 'Milliseconds to wait (1-30000, default 1000).' } }),
+        async (args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.wait(args.ms ?? 1000))
+        },
+        value => [{ type: 'text', text: `waited ${value.waited}ms` }],
       ),
       define(
         'pilot_screenshot',
