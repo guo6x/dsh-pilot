@@ -1,6 +1,6 @@
 # 🛩️ dsh-pilot — 给你的 DSH agent 一双会开车的手
 
-[English](README.md) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com) [English](README.md) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件
 
 让 agent 在 DSH 对话里**操控真实浏览器**：打开网页、把页面当结构化文本读、点击、输入、按键、执行 JS、截图——你在 Web GUI 的可拖拽**驾驶舱面板**里实时围观，随时接管。
 
@@ -19,6 +19,8 @@ dsh plugin --profile web add github:guo6x/dsh-pilot
 重启 `dsh web`、刷新页面，侧边栏底部出现 ✈️ 按钮，点开即是驾驶舱。
 
 要求：DSH web profile、Node ≥ 22、装了 Edge 或 Chrome。
+
+![demo](docs/demo.gif)
 
 ## agent 得到的工具
 

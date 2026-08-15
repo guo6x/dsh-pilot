@@ -1,6 +1,6 @@
 # 🛩️ dsh-pilot — give your DSH agent hands
 
-[中文说明](README.zh.md) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com) [中文说明](README.zh.md) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin
 
 Drive a **real browser** from the DeepSeek Harness chat: the agent opens pages, reads them as structured text, clicks, types, presses keys, evaluates JS, and takes screenshots — while you watch a live draggable **cockpit panel** in the Web GUI and can take over at any time.
 
@@ -19,6 +19,8 @@ dsh plugin --profile web add github:guo6x/dsh-pilot
 Restart `dsh web`, refresh the page. A ✈️ button appears at the sidebar foot — that opens the cockpit.
 
 Requirements: DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome installed.
+
+![demo](docs/demo.gif)
 
 ## What the agent gets
 
