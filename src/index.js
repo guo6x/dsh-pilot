@@ -151,11 +151,10 @@ export class Pilot {
   }
 
   async pickPort(base = 9222) {
-    for (let port = base; port < base + 20; port++) {
+    for (let port = base; port < base + 40; port++) {
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(400) })
-        if (!res.ok) continue
-        return null
+        await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(400) })
+        continue // occupied — try the next port
       } catch {
         return port
       }
