@@ -29,9 +29,9 @@ Requirements: DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome inst
 | Tool | What it does |
 |---|---|
 | `pilot_open` | Open a URL (launches the browser on first use), return title/URL/text snapshot |
-| `pilot_snapshot` | Read the current page as text: title, URL, visible text (8k chars), links, form counts |
-| `pilot_click` | Click an element by CSS selector (scrolls into view first) |
-| `pilot_type` | Type into an input/textarea via the native value setter — React/Vue forms observe it |
+| `pilot_snapshot` | Read the current page as text: title, URL, visible text (8k chars), links, and a **numbered element list** (refs) |
+| `pilot_click` | Click an element **by its snapshot ref** (or CSS selector); scrolls into view first |
+| `pilot_type` | Type into an input **by its snapshot ref** (or selector) via the native value setter — React/Vue forms observe it |
 | `pilot_press` | Press a key (Enter/Tab/Escape/arrows/single chars) |
 | `pilot_screenshot` | Save a PNG and return its path (for vision-capable models or the human) |
 | `pilot_eval` | Evaluate JS in the page, get JSON back |

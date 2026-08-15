@@ -29,9 +29,9 @@ dsh plugin --profile web add dsh-pilot
 | 工具 | 作用 |
 |---|---|
 | `pilot_open` | 打开网址（首次自动拉起浏览器），返回标题/URL/正文快照 |
-| `pilot_snapshot` | 把当前页面读成文本：标题、URL、可见文本（8k 字符）、链接、表单元素数 |
-| `pilot_click` | 按 CSS 选择器点击元素（先滚动到可视区） |
-| `pilot_type` | 往输入框打字（走原生 value setter，React/Vue 表单能感知） |
+| `pilot_snapshot` | 把当前页面读成文本：标题、URL、可见文本（8k 字符）、链接，以及**编号元素列表（refs）** |
+| `pilot_click` | 按**快照编号**（或 CSS 选择器）点击元素，先滚动到可视区 |
+| `pilot_type` | 按**快照编号**（或选择器）往输入框打字（原生 value setter，React/Vue 表单能感知） |
 | `pilot_press` | 按键（Enter/Tab/Escape/方向键/单个字符） |
 | `pilot_screenshot` | 存 PNG 并返回路径（给有视觉的模型或人看） |
 | `pilot_eval` | 页面里执行 JS，拿 JSON 结果 |
