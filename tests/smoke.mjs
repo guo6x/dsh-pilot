@@ -3,6 +3,7 @@
  * Run: node tests/smoke.mjs
  */
 import { Pilot, PilotPool } from '../lib/index.js'
+import { tmpdir } from 'node:os'
 
 let failed = 0
 const check = (label, condition, extra = '') => {
@@ -39,6 +40,11 @@ try {
 
   const state1 = pilot.state()
   check('state: log populated', state1.log.length >= 4, `${state1.log.length} entries`)
+
+  // screenshot into a nested, non-existent directory — mkdir -p regression
+  const { saveScreenshot } = await import('../lib/index.js')
+  const nested = await saveScreenshot(pilot, `${tmpdir()}/dsh-pilot-nested/a/b/shot.png`)
+  check('screenshot: creates parent dirs', nested.ok === true && nested.bytes > 1000, nested.path)
 } catch (error) {
   failed++
   console.error('FATAL', error)

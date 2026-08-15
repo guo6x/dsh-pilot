@@ -15,9 +15,9 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 export const name = 'dsh-pilot'
 export const inject = ['webServer', 'tools']
@@ -537,6 +537,15 @@ function renderElements(elements, cap = 60) {
   return out
 }
 
+/** Capture and persist a screenshot, creating parent directories as needed. */
+export async function saveScreenshot(pilot, path) {
+  await pilot.ensure()
+  const shot = await pilot.captureShot()
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, shot)
+  return { ok: true, path, bytes: shot.length }
+}
+
 export function apply(ctx) {
   const pool = new PilotPool()
 
@@ -687,13 +696,8 @@ export function apply(ctx) {
         obj({ path: str('Optional absolute path ending in .png; default is a timestamped file in the OS temp directory.') }),
         async (args, exec) => {
           const pilot = pool.for(exec.agent?.session?.id ?? 'default')
-          return pilot.withOp(async () => {
-            await pilot.ensure()
-            const shot = await pilot.captureShot()
-            const target = args.path ?? join(tmpdir(), `dsh-pilot-${Date.now()}.png`)
-            await writeFile(target, shot)
-            return { ok: true, path: target, bytes: shot.length }
-          })
+          const target = args.path ?? join(tmpdir(), `dsh-pilot-${Date.now()}.png`)
+          return pilot.withOp(() => saveScreenshot(pilot, target))
         },
         value => [{ type: 'text', text: `screenshot saved: ${value.path} (${value.bytes} bytes)` }],
       ),
@@ -713,9 +717,10 @@ export function apply(ctx) {
         obj({}),
         async (_args, exec) => {
           const pilot = pool.for(exec.agent?.session?.id ?? 'default')
-          return pilot.withOp(() => pilot.stop())
+          await pilot.withOp(() => pilot.stop())
+          return { ok: true, status: pilot.status }
         },
-        () => [{ type: 'text', text: 'browser stopped' }],
+        value => [{ type: 'text', text: `browser stopped (${value.status})` }],
       ),
     ]
     for (const def of defs) {
