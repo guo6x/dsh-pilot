@@ -1,14 +1,17 @@
 /**
  * dsh-pilot host plugin.
  *
- * Owns a headless Edge/Chrome instance, talks CDP over the native Node >= 22
- * WebSocket (zero runtime dependencies), serves a loopback JSON/PNG API for
- * the client cockpit panel, and registers pilot_* tools for the agent.
+ * Owns a pool of headless Edge/Chrome instances (one per agent session),
+ * talks CDP over the native Node >= 22 WebSocket (zero runtime dependencies),
+ * serves a loopback JSON/PNG API for the client cockpit panel, and registers
+ * pilot_* tools for the agent.
  *
  * Agent-facing design: the model reads STRUCTURED text snapshots (title, url,
- * body text, links) instead of screenshots, so text-only models can drive the
- * browser without spending vision tokens. Screenshots exist for the human
- * panel and for vision-capable models via pilot_screenshot.
+ * body text, links, and a numbered element list) instead of screenshots, so
+ * text-only models can drive the browser without spending vision tokens.
+ * Every interactive element gets a stable ref; click/type take that ref
+ * instead of a guessed CSS selector. Screenshots exist for the human panel
+ * and for vision-capable models via pilot_screenshot.
  */
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -34,7 +37,9 @@ const EDGE_CANDIDATES = [
 const MAX_TEXT = 8000
 const MAX_EVAL = 20000
 const MAX_LOG = 200
+const MAX_ELEMENTS = 200
 const NAV_TIMEOUT_MS = 20000
+const POOL_CAP = 8
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -122,6 +127,7 @@ export class Pilot {
     this.profileDir = null
     this.opLock = Promise.resolve()
     this.stopping = false
+    this.lastUsedAt = Date.now()
     this.edgePath = options.edgePath ?? null
   }
 
@@ -175,7 +181,7 @@ export class Pilot {
     this.note('info', 'launching browser')
     const edge = this.findEdge()
     const port = await this.pickPort()
-    if (port === null) throw new Error('pilot: no free debugging port in 9222..9241')
+    if (port === null) throw new Error('pilot: no free debugging port in 9222..9262')
     this.port = port
     this.profileDir = await mkdtemp(join(tmpdir(), 'dsh-pilot-'))
     const argv = [
@@ -258,6 +264,7 @@ export class Pilot {
     }
   }
 
+  /** Walk interactive elements and pin numbered refs on the page. */
   async snapshot() {
     await this.ensure()
     const { result } = await this.cdp.call('Runtime.evaluate', {
@@ -267,6 +274,20 @@ export class Pilot {
           t: (a.innerText || a.title || a.getAttribute('aria-label') || '').trim().slice(0, 80),
           h: a.href,
         })).filter(l => l.h)
+        const selectors = 'a,button,input,textarea,select,summary,[role="button"],[role="link"],[role="textbox"],[role="checkbox"],[role="combobox"],[role="option"],[role="tab"]'
+        const els = []
+        const seen = new Set()
+        for (const el of document.querySelectorAll(selectors)) {
+          if (seen.has(el)) continue
+          seen.add(el)
+          const r = el.getBoundingClientRect()
+          if (r.width === 0 && r.height === 0) continue
+          const tag = el.tagName.toLowerCase()
+          const label = (el.innerText || el.value || el.getAttribute('aria-label') || el.title || el.name || el.placeholder || '').trim().slice(0, 100)
+          els.push({ el, ref: els.length + 1, tag, type: el.getAttribute('type') || '', label, href: el.href || '' })
+          if (els.length >= ${MAX_ELEMENTS}) break
+        }
+        window.__pilotEls = els
         return {
           title: document.title,
           url: location.href,
@@ -275,6 +296,7 @@ export class Pilot {
           links,
           buttons: document.querySelectorAll('button').length,
           inputs: document.querySelectorAll('input,textarea,select').length,
+          elements: els.map(({ el, ...d }) => d),
         }
       })())`,
       returnByValue: true,
@@ -285,42 +307,56 @@ export class Pilot {
     return data
   }
 
-  async click(selector) {
+  async click(target) {
     await this.ensure()
+    const expression = typeof target === 'number'
+      ? `(() => {
+          const entry = window.__pilotEls && window.__pilotEls[${target} - 1]
+          if (!entry) return { ok: false, error: 'stale or unknown ref ' + ${JSON.stringify(String(target))} + ' — run pilot_snapshot for the current numbered list' }
+          const el = entry.el
+          el.scrollIntoView({ block: 'center' })
+          el.click()
+          return { ok: true, ref: ${target}, tag: el.tagName.toLowerCase(), text: (el.innerText || el.value || '').slice(0, 120) }
+        })()`
+      : `(() => {
+          const el = document.querySelector(${JSON.stringify(target)})
+          if (!el) return { ok: false, error: 'no element matches selector' }
+          el.scrollIntoView({ block: 'center' })
+          el.click()
+          return { ok: true, tag: el.tagName.toLowerCase(), text: (el.innerText || el.value || '').slice(0, 120) }
+        })()`
     const { result, exceptionDetails } = await this.cdp.call('Runtime.evaluate', {
-      expression: `(() => {
-        const el = document.querySelector(${JSON.stringify(selector)})
-        if (!el) return { ok: false, error: 'no element matches selector' }
-        el.scrollIntoView({ block: 'center' })
-        el.click()
-        return { ok: true, tag: el.tagName.toLowerCase(), text: (el.innerText || el.value || '').slice(0, 120) }
-      })()`,
+      expression,
       returnByValue: true,
     })
     if (exceptionDetails) return { ok: false, error: exceptionDetails.text ?? 'evaluate failed' }
-    this.note('click', selector)
+    this.note('click', String(target))
     await sleep(400)
     await this.captureShot()
     return { ...result.value, title: await this.readTitle() }
   }
 
-  async type(selector, text) {
+  async type(target, text) {
     await this.ensure()
-    const { result, exceptionDetails } = await this.cdp.call('Runtime.evaluate', {
-      expression: `(() => {
-        const el = document.querySelector(${JSON.stringify(selector)})
-        if (!el) return { ok: false, error: 'no element matches selector' }
+    const resolve = typeof target === 'number'
+      ? `(window.__pilotEls && window.__pilotEls[${target} - 1] && window.__pilotEls[${target} - 1].el) || null`
+      : `document.querySelector(${JSON.stringify(target)})`
+    const expression = `(() => {
+        const el = ${resolve}
+        if (!el) return { ok: false, error: 'no element matches the given ref or selector — run pilot_snapshot first' }
         el.focus()
         const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
         Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(text)})
         el.dispatchEvent(new Event('input', { bubbles: true }))
         el.dispatchEvent(new Event('change', { bubbles: true }))
         return { ok: true }
-      })()`,
+      })()`
+    const { result, exceptionDetails } = await this.cdp.call('Runtime.evaluate', {
+      expression,
       returnByValue: true,
     })
     if (exceptionDetails) return { ok: false, error: exceptionDetails.text ?? 'evaluate failed' }
-    this.note('type', `${selector} <= ${text.slice(0, 60)}`)
+    this.note('type', `${String(target)} <= ${text.slice(0, 60)}`)
     await this.captureShot()
     return result.value
   }
@@ -415,6 +451,48 @@ export class Pilot {
   }
 }
 
+/** Session-keyed browser pool: one Pilot per agent session, LRU-capped. */
+export class PilotPool {
+  constructor() {
+    this.pilots = new Map()
+    this.primary = null
+  }
+
+  for(sessionKey) {
+    let pilot = this.pilots.get(sessionKey)
+    if (pilot === undefined) {
+      pilot = new Pilot()
+      this.pilots.set(sessionKey, pilot)
+      this.gc()
+    }
+    pilot.lastUsedAt = Date.now()
+    this.primary = sessionKey
+    return pilot
+  }
+
+  panelPilot() {
+    if (this.primary !== null && this.pilots.has(this.primary)) return this.pilots.get(this.primary)
+    return this.for('default')
+  }
+
+  gc() {
+    if (this.pilots.size <= POOL_CAP) return
+    const candidates = [...this.pilots.entries()]
+      .filter(([key]) => key !== this.primary)
+      .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
+    const [key, pilot] = candidates[0]
+    this.pilots.delete(key)
+    void pilot.dispose()
+  }
+
+  async disposeAll() {
+    const pilots = [...this.pilots.values()]
+    this.pilots.clear()
+    this.primary = null
+    for (const pilot of pilots) await pilot.dispose()
+  }
+}
+
 const KEY_CODES = {
   Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', ArrowUp: 'ArrowUp',
   ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', PageUp: 'PageUp',
@@ -450,10 +528,19 @@ function sendJson(res, status, value) {
   res.end(body)
 }
 
-export function apply(ctx) {
-  const pilot = new Pilot()
+/** Render a numbered element list for the model (refs match pilot_click/pilot_type). */
+function renderElements(elements, cap = 60) {
+  const lines = (elements ?? []).slice(0, cap).map(el =>
+    `[${el.ref}] <${el.tag}${el.type ? ` type="${el.type}"` : ''}> ${el.label || el.href || ''}`)
+  const out = lines.join('\n')
+  if ((elements ?? []).length > cap) return `${out}\n…(${elements.length - cap} more elements)`
+  return out
+}
 
-  // ---- loopback HTTP API for the cockpit panel ----
+export function apply(ctx) {
+  const pool = new PilotPool()
+
+  // ---- loopback HTTP API for the cockpit panel (shows the most recent pilot) ----
   const webServer = ctx.webServer
   if (webServer !== undefined) {
     ctx.effect(() => webServer.register({
@@ -467,6 +554,7 @@ export function apply(ctx) {
         }
         const pathname = new URL(req.url ?? '/', 'http://x').pathname
         const suffix = pathname.slice('/dsh-pilot'.length) || '/'
+        const pilot = pool.panelPilot()
         try {
           if (req.method === 'GET' && suffix === '/state') {
             sendJson(res, 200, pilot.state())
@@ -519,7 +607,7 @@ export function apply(ctx) {
       },
       async execute(args, exec) {
         if (exec?.signal?.aborted) throw new Error('aborted')
-        return execute(args)
+        return execute(args, exec)
       },
     })
 
@@ -534,67 +622,99 @@ export function apply(ctx) {
     const defs = [
       define(
         'pilot_open',
-        'Open a URL in the controlled browser (launches a headless Edge/Chrome if needed). Returns a text snapshot: title, URL, visible text, and links. Prefer this over web_fetch when the page needs JavaScript or interaction.',
+        'Open a URL in your session\'s controlled browser (launches a headless Edge/Chrome if needed). Returns a text snapshot: title, URL, visible text, links, and a numbered element list. Prefer this over web_fetch when the page needs JavaScript or interaction.',
         obj({ url: str('Full http(s) URL to open.') }, ['url']),
-        async args => pilot.withOp(() => pilot.navigate(args.url)),
-        value => [{ type: 'text', text: `[${value.title}](${value.url})\n${value.text.slice(0, 2000)}` }],
+        async (args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.navigate(args.url))
+        },
+        value => [{ type: 'text', text: `[${value.title}](${value.url})\n${value.text.slice(0, 1500)}\n\nelements:\n${renderElements(value.elements, 40)}` }],
       ),
       define(
         'pilot_snapshot',
-        'Read the current page state of the controlled browser as text: title, URL, visible text (up to 8000 chars), links, and form element counts. Use this to understand the current page without spending vision tokens.',
+        'Read the current page of your session\'s browser as text: title, URL, visible text (up to 8000 chars), links, and a NUMBERED list of interactive elements. Use the element numbers (refs) with pilot_click/pilot_type — never guess CSS selectors. Re-run after navigation; refs go stale when the page changes.',
         obj({}),
-        async () => pilot.withOp(() => pilot.snapshot()),
-        value => [{ type: 'text', text: `[${value.title}](${value.url})\n${value.text.slice(0, 4000)}${value.textLength > 4000 ? '\n…(text truncated, ' + value.textLength + ' chars total)' : ''}\nlinks: ${value.links.length}, buttons: ${value.buttons}, inputs: ${value.inputs}` }],
+        async (_args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.snapshot())
+        },
+        value => [{ type: 'text', text: `[${value.title}](${value.url})\n${value.text.slice(0, 4000)}${value.textLength > 4000 ? `\n…(text truncated, ${value.textLength} chars total)` : ''}\n\nelements:\n${renderElements(value.elements)}` }],
       ),
       define(
         'pilot_click',
-        'Click an element in the controlled browser by CSS selector. Scrolls it into view first. Returns ok plus the clicked element tag/text and the new page title.',
-        obj({ selector: str('CSS selector of the element to click.') }, ['selector']),
-        async args => pilot.withOp(() => pilot.click(args.selector)),
-        value => [{ type: 'text', text: value.ok ? `clicked <${value.tag}> "${value.text}" — title now: ${value.title}` : `click failed: ${value.error}` }],
+        'Click an element in your session\'s browser by its snapshot ref (number) or a CSS selector. Scrolls it into view first. Returns ok plus the clicked element tag/text and the new page title.',
+        obj({
+          ref: { type: 'number', description: 'Element ref from the numbered list in pilot_snapshot/pilot_open. Takes precedence over selector.' },
+          selector: str('CSS selector of the element to click (fallback when you have no ref).'),
+        }),
+        async (args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          const target = typeof args.ref === 'number' ? args.ref : args.selector
+          if (target === undefined) throw new Error('provide ref or selector')
+          return pilot.withOp(() => pilot.click(target))
+        },
+        value => [{ type: 'text', text: value.ok ? `clicked ${value.ref !== undefined ? `ref ${value.ref} ` : ''}<${value.tag}> "${value.text}" — title now: ${value.title}` : `click failed: ${value.error}` }],
       ),
       define(
         'pilot_type',
-        'Type text into an input/textarea in the controlled browser by CSS selector. Sets the value through the native setter and fires input/change events, so framework-managed forms (React/Vue) observe it.',
+        'Type text into an input/textarea in your session\'s browser by snapshot ref (number) or CSS selector. Sets the value through the native setter and fires input/change events, so framework-managed forms (React/Vue) observe it.',
         obj({
-          selector: str('CSS selector of the input or textarea.'),
+          ref: { type: 'number', description: 'Element ref from the numbered list in pilot_snapshot/pilot_open. Takes precedence over selector.' },
+          selector: str('CSS selector of the input or textarea (fallback when you have no ref).'),
           text: str('Text to type.'),
-        }, ['selector', 'text']),
-        async args => pilot.withOp(() => pilot.type(args.selector, args.text)),
+        }, ['text']),
+        async (args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          const target = typeof args.ref === 'number' ? args.ref : args.selector
+          if (target === undefined) throw new Error('provide ref or selector')
+          return pilot.withOp(() => pilot.type(target, args.text))
+        },
         value => [{ type: 'text', text: value.ok ? 'typed' : `type failed: ${value.error}` }],
       ),
       define(
         'pilot_press',
-        'Press a keyboard key in the controlled browser (Enter, Tab, Escape, Backspace, arrows, or a single character). Use Enter to submit forms, Tab to move focus.',
+        'Press a keyboard key in your session\'s browser (Enter, Tab, Escape, Backspace, arrows, or a single character). Use Enter to submit forms, Tab to move focus.',
         obj({ key: str('Key to press, e.g. Enter.') }, ['key']),
-        async args => pilot.withOp(() => pilot.press(args.key)),
+        async (args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.press(args.key))
+        },
         value => [{ type: 'text', text: `pressed ${value.key}` }],
       ),
       define(
         'pilot_screenshot',
-        'Capture a PNG screenshot of the controlled browser page. Returns the absolute path to the saved file; a vision-capable model (or the user in the cockpit panel) can then view it.',
+        'Capture a PNG screenshot of your session\'s browser page. Returns the absolute path to the saved file; a vision-capable model (or the user in the cockpit panel) can then view it.',
         obj({ path: str('Optional absolute path ending in .png; default is a timestamped file in the OS temp directory.') }),
-        async args => pilot.withOp(async () => {
-          await pilot.ensure()
-          const shot = await pilot.captureShot()
-          const target = args.path ?? join(tmpdir(), `dsh-pilot-${Date.now()}.png`)
-          await writeFile(target, shot)
-          return { ok: true, path: target, bytes: shot.length }
-        }),
+        async (args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(async () => {
+            await pilot.ensure()
+            const shot = await pilot.captureShot()
+            const target = args.path ?? join(tmpdir(), `dsh-pilot-${Date.now()}.png`)
+            await writeFile(target, shot)
+            return { ok: true, path: target, bytes: shot.length }
+          })
+        },
         value => [{ type: 'text', text: `screenshot saved: ${value.path} (${value.bytes} bytes)` }],
       ),
       define(
         'pilot_eval',
-        'Evaluate a JavaScript expression in the controlled browser page and return the result as JSON. Use for reading state that is not in the text snapshot. The expression runs in page context.',
+        'Evaluate a JavaScript expression in your session\'s browser page and return the result as JSON. Use for reading state that is not in the text snapshot. The expression runs in page context.',
         obj({ expression: str('JavaScript expression to evaluate in the page.') }, ['expression']),
-        async args => pilot.withOp(() => pilot.evalJs(args.expression)),
+        async (args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.evalJs(args.expression))
+        },
         value => [{ type: 'text', text: value.ok ? `type=${value.type} value=${value.text}` : `eval failed: ${value.error}` }],
       ),
       define(
         'pilot_close',
-        'Stop and clean up the controlled browser process. The next pilot_* call relaunches it automatically.',
+        'Stop and clean up your session\'s browser process. The next pilot_* call relaunches it automatically.',
         obj({}),
-        async () => pilot.withOp(() => pilot.stop()),
+        async (_args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.stop())
+        },
         () => [{ type: 'text', text: 'browser stopped' }],
       ),
     ]
@@ -603,5 +723,5 @@ export function apply(ctx) {
     }
   }
 
-  ctx.effect(() => () => pilot.dispose(), 'dsh-pilot: browser cleanup')
+  ctx.effect(() => () => pool.disposeAll(), 'dsh-pilot: browser pool cleanup')
 }

@@ -1,6 +1,6 @@
 {
   "name": "dsh-pilot",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Give your DSH agent hands: drive a real browser (Edge/Chrome over CDP) from the chat, with a live draggable cockpit panel in the Web GUI. Zero runtime dependencies, no API key, one command install.",
   "type": "module",
   "exports": {
