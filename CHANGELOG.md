@@ -2,6 +2,13 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.4.0] - 2026-08-15
+
+### Added
+
+- **Snapshot diffing**: `pilot_snapshot` returns a `changed` summary versus the previous snapshot (URL/title changes, text length delta, elements added/removed by fingerprint match); the diff window resets on navigation.
+- `pilot_diff` — a 12th tool that reports ONLY the change summary, so a text-only agent can judge whether an action worked without re-reading the whole page.
+
 ## [0.3.0] - 2026-08-15
 
 ### Added
