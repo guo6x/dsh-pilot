@@ -21,6 +21,7 @@ try {
   check('navigate: has body text', snapshot.text.includes('Example Domain'))
   check('navigate: numbered elements', Array.isArray(snapshot.elements) && snapshot.elements.length > 0, `${snapshot.elements.length} elements`)
   check('navigate: first element ref is 1', snapshot.elements[0].ref === 1)
+  check('snapshot: no baseline on first snapshot', snapshot.changed === null)
 
   const learnMore = snapshot.elements.find(el => el.href.includes('iana.org'))
   check('elements: href captured', learnMore !== undefined)
@@ -29,6 +30,9 @@ try {
   check('click by ref: ok', clicked.ok === true && clicked.ref === learnMore.ref, JSON.stringify(clicked).slice(0, 120))
   check('click: waits for navigation', /iana\.org/.test(clicked.url), clicked.url)
   check('click: title settled after load', typeof clicked.title === 'string' && clicked.title.length > 0, clicked.title)
+
+  const snapAfter = await pilot.snapshot()
+  check('snapshot: urlChanged after click', snapAfter.changed !== null && snapAfter.changed.urlChanged === true, JSON.stringify(snapAfter.changed).slice(0, 160))
 
   const wentBack = await pilot.back()
   check('back: returns to previous page', /example\.com/.test(wentBack.url), wentBack.url)

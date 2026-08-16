@@ -129,6 +129,7 @@ export class Pilot {
     this.stopping = false
     this.lastUsedAt = Date.now()
     this.edgePath = options.edgePath ?? null
+    this.lastSnapshot = null // descriptors of the previous snapshot, for diffs
   }
 
   note(type, msg) {
@@ -248,6 +249,7 @@ export class Pilot {
     this.url = url
     this.title = await this.readTitle()
     this.note('nav', url)
+    this.lastSnapshot = null // a new page starts a fresh diff window
     await this.captureShot()
     return this.snapshot()
   }
@@ -304,7 +306,14 @@ export class Pilot {
     const data = JSON.parse(result.value)
     this.url = data.url
     this.title = data.title
-    return data
+    const changed = diffSnapshots(this.lastSnapshot, data)
+    this.lastSnapshot = {
+      url: data.url,
+      title: data.title,
+      textLength: data.textLength,
+      elements: data.elements,
+    }
+    return { ...data, changed }
   }
 
   /** Wait for the next load event or the timeout — lets navigations settle. Never rejects. */
@@ -596,6 +605,62 @@ function renderElements(elements, cap = 60) {
   return out
 }
 
+/** Element fingerprint for cross-snapshot matching (heuristic, not DOM identity). */
+function elementKey(el) {
+  return `${el.tag}|${el.type ?? ''}|${el.label ?? ''}|${el.href ?? ''}`
+}
+
+/** Diff two snapshots into a compact change summary (null when no baseline exists). */
+function diffSnapshots(prev, next) {
+  if (prev === null) return null
+  const prevCounts = new Map()
+  for (const el of prev.elements ?? []) {
+    const key = elementKey(el)
+    prevCounts.set(key, (prevCounts.get(key) ?? 0) + 1)
+  }
+  const nextCounts = new Map()
+  for (const el of next.elements ?? []) {
+    const key = elementKey(el)
+    nextCounts.set(key, (nextCounts.get(key) ?? 0) + 1)
+  }
+  const added = []
+  const removed = []
+  for (const el of next.elements ?? []) {
+    if (!prevCounts.has(elementKey(el))) added.push({ ref: el.ref, tag: el.tag, label: el.label ?? el.href ?? '', type: el.type ?? '' })
+  }
+  for (const el of prev.elements ?? []) {
+    if (!nextCounts.has(elementKey(el))) removed.push({ tag: el.tag, label: el.label ?? el.href ?? '', type: el.type ?? '' })
+  }
+  return {
+    urlChanged: prev.url !== next.url,
+    titleChanged: prev.title !== next.title,
+    textDelta: (next.textLength ?? 0) - (prev.textLength ?? 0),
+    added: added.slice(0, 10),
+    removed: removed.slice(0, 10),
+  }
+}
+
+/** Render a change summary for the model. */
+function renderChanged(changed) {
+  if (changed === null || changed === undefined) return 'no baseline yet (navigate first)'
+  const parts = [
+    `url: ${changed.urlChanged ? 'CHANGED' : 'same'}`,
+    `title: ${changed.titleChanged ? 'CHANGED' : 'same'}`,
+    `text: ${changed.textDelta >= 0 ? '+' : ''}${changed.textDelta} chars`,
+    `elements: +${changed.added.length} added, -${changed.removed.length} removed`,
+  ]
+  const out = parts.join(' | ')
+  if (changed.added.length === 0 && changed.removed.length === 0) return out
+  const lines = [out]
+  for (const el of changed.added.slice(0, 5)) {
+    lines.push(`  + [${el.ref}] <${el.tag}${el.type ? ` type="${el.type}"` : ''}> ${(el.label || '').slice(0, 60)}`)
+  }
+  for (const el of changed.removed.slice(0, 5)) {
+    lines.push(`  - <${el.tag}${el.type ? ` type="${el.type}"` : ''}> ${(el.label || '').slice(0, 60)}`)
+  }
+  return lines.join('\n')
+}
+
 /** Capture and persist a screenshot, creating parent directories as needed. */
 export async function saveScreenshot(pilot, path) {
   await pilot.ensure()
@@ -700,13 +765,23 @@ export function apply(ctx) {
       ),
       define(
         'pilot_snapshot',
-        'Read the current page of your session\'s browser as text: title, URL, visible text (up to 8000 chars), links, and a NUMBERED list of interactive elements. Use the element numbers (refs) with pilot_click/pilot_type — never guess CSS selectors. Re-run after navigation; refs go stale when the page changes.',
+        'Read the current page of your session\'s browser as text: title, URL, visible text (up to 8000 chars), links, a NUMBERED list of interactive elements, and a change summary versus the previous snapshot. Use the element numbers (refs) with pilot_click/pilot_type — never guess CSS selectors. Re-run after navigation; refs go stale when the page changes.',
         obj({}),
         async (_args, exec) => {
           const pilot = pool.for(exec.agent?.session?.id ?? 'default')
           return pilot.withOp(() => pilot.snapshot())
         },
-        value => [{ type: 'text', text: `[${value.title}](${value.url})\n${value.text.slice(0, 4000)}${value.textLength > 4000 ? `\n…(text truncated, ${value.textLength} chars total)` : ''}\n\nelements:\n${renderElements(value.elements)}` }],
+        value => [{ type: 'text', text: `[${value.title}](${value.url})\n${value.text.slice(0, 4000)}${value.textLength > 4000 ? `\n…(text truncated, ${value.textLength} chars total)` : ''}\n\nchanged:\n${renderChanged(value.changed)}\n\nelements:\n${renderElements(value.elements)}` }],
+      ),
+      define(
+        'pilot_diff',
+        'Compare the current page of your session\'s browser against the previous snapshot and report ONLY what changed: URL/title changes, text length delta, and elements that appeared or disappeared. Use it after an action (click/type/press) to judge whether the action had the intended effect, without re-reading the whole page.',
+        obj({}),
+        async (_args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          return pilot.withOp(() => pilot.snapshot())
+        },
+        value => [{ type: 'text', text: renderChanged(value.changed) }],
       ),
       define(
         'pilot_click',
