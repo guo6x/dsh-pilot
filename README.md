@@ -32,7 +32,8 @@ Requirements: DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome inst
 | Tool | What it does |
 |---|---|
 | `pilot_open` | Open a URL (launches the browser on first use), return title/URL/text snapshot |
-| `pilot_snapshot` | Read the current page as text: title, URL, visible text (8k chars), links, and a **numbered element list** (refs) |
+| `pilot_snapshot` | Read the current page as text: title, URL, visible text (8k chars), links, a **numbered element list** (refs), and a **change summary** vs the previous snapshot |
+| `pilot_diff` | Report ONLY what changed since the last snapshot (URL/title/text delta, elements added/removed) — judge whether an action worked without re-reading the page |
 | `pilot_click` | Click an element **by its snapshot ref** (or CSS selector); scrolls into view first |
 | `pilot_type` | Type into an input **by its snapshot ref** (or selector) via the native value setter — React/Vue forms observe it |
 | `pilot_press` | Press a key (Enter/Tab/Escape/arrows/single chars) |
