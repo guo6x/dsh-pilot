@@ -36,6 +36,7 @@ const EDGE_CANDIDATES = [
 ]
 const MAX_TEXT = 8000
 const MAX_EVAL = 20000
+const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 const MAX_LOG = 200
 const MAX_ELEMENTS = 200
 const NAV_TIMEOUT_MS = 20000
@@ -484,6 +485,41 @@ export class Pilot {
     return { ok: true, type: result.type, value, text }
   }
 
+  /**
+   * Download a resource (default: the current page) through the page's own
+   * fetch — inherits cookies/session — and persist it to `path`.
+   */
+  async download(url, path) {
+    await this.ensure()
+    const target = url ?? this.url
+    if (!/^https?:\/\//.test(target)) return { ok: false, error: 'url must be an http(s) URL' }
+    const { result, exceptionDetails } = await this.cdp.call('Runtime.evaluate', {
+      expression: `(async () => {
+        try {
+          const res = await fetch(${JSON.stringify(target)}, { credentials: 'include' })
+          if (!res.ok) return { ok: false, error: 'http ' + res.status }
+          const buf = await res.arrayBuffer()
+          if (buf.byteLength > ${MAX_DOWNLOAD_BYTES}) return { ok: false, error: 'too large: ' + buf.byteLength + ' bytes (cap ${MAX_DOWNLOAD_BYTES})' }
+          const bytes = new Uint8Array(buf)
+          let bin = ''
+          for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000))
+          return { ok: true, base64: btoa(bin), bytes: buf.byteLength, type: res.headers.get('content-type') || '' }
+        } catch (err) {
+          return { ok: false, error: String(err && err.message || err) }
+        }
+      })()`,
+      awaitPromise: true,
+      returnByValue: true,
+    }, 90000)
+    if (exceptionDetails) return { ok: false, error: exceptionDetails.text ?? 'evaluate failed' }
+    const data = result.value
+    if (!data.ok) return data
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, Buffer.from(data.base64, 'base64'))
+    this.note('download', `${target} -> ${path} (${data.bytes} bytes)`)
+    return { ok: true, path, bytes: data.bytes, type: data.type }
+  }
+
   async stop() {
     this.stopping = true
     this.cdp?.close()
@@ -874,6 +910,28 @@ export function apply(ctx) {
           return pilot.withOp(() => pilot.evalJs(args.expression))
         },
         value => [{ type: 'text', text: value.ok ? `type=${value.type} value=${value.text}` : `eval failed: ${value.error}` }],
+      ),
+      define(
+        'pilot_download',
+        'Download a resource (default: the current page URL) through the page\'s own fetch — it inherits cookies/session auth — and save it to disk. Default path is the session workspace with the URL basename; cap 20 MB. Use for PDFs/CSVs/files behind the current session.',
+        obj({
+          url: str('Optional http(s) URL; defaults to the current page.'),
+          path: str('Optional absolute target path; default is the session workspace + URL basename.'),
+        }),
+        async (args, exec) => {
+          const pilot = pool.for(exec.agent?.session?.id ?? 'default')
+          const target = args.url ?? pilot.url
+          let path = args.path
+          if (path === undefined) {
+            let name = ''
+            try { name = new URL(target).pathname.split('/').pop() ?? '' } catch {}
+            if (name === '' || !/\.[A-Za-z0-9]{1,8}$/.test(name)) name = `pilot-download-${Date.now()}`
+            const base = exec.agent?.session?.cwd ?? tmpdir()
+            path = join(base, name)
+          }
+          return pilot.withOp(() => pilot.download(target, path))
+        },
+        value => [{ type: 'text', text: value.ok ? `downloaded: ${value.path} (${value.bytes} bytes, ${value.type || 'unknown type'})` : `download failed: ${value.error}` }],
       ),
       define(
         'pilot_close',

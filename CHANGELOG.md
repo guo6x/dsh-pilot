@@ -2,6 +2,12 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.4.1] - 2026-08-15
+
+### Added
+
+- `pilot_download` — a 13th tool that downloads a resource (default: the current page) through the page's own `fetch`, inheriting cookies/session auth; saves to the session workspace by default, 20 MB cap.
+
 ## [0.4.0] - 2026-08-15
 
 ### Added

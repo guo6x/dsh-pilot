@@ -60,6 +60,10 @@ try {
   const { saveScreenshot } = await import('../lib/index.js')
   const nested = await saveScreenshot(pilot, `${tmpdir()}/dsh-pilot-nested/a/b/shot.png`)
   check('screenshot: creates parent dirs', nested.ok === true && nested.bytes > 1000, nested.path)
+
+  // download through the page's own fetch (session cookies apply)
+  const dl = await pilot.download('https://example.com', `${tmpdir()}/dsh-pilot-dl-test.html`)
+  check('download: saves file with bytes', dl.ok === true && dl.bytes > 500, JSON.stringify(dl))
 } catch (error) {
   failed++
   console.error('FATAL', error)
