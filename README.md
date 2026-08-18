@@ -86,3 +86,7 @@ node tests/smoke.mjs  # real-headless-Edge end-to-end smoke test
 ```
 
 MIT licensed. Found a bug or an idea? Open an issue.
+
+## Related
+
+- Chinese dev log (掘金): [我给我的 agent 装了双手：零依赖浏览器操控插件开发记](https://juejin.cn/post/7674905370994982927)

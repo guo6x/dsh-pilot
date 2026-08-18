@@ -86,3 +86,7 @@ node tests/smoke.mjs  # 真 headless Edge 端到端冒烟测试
 ```
 
 MIT 协议。发现问题或有好点子，直接提 issue。
+
+## 相关资源
+
+- 中文实录（掘金）：[我给我的 agent 装了双手：零依赖浏览器操控插件开发记](https://juejin.cn/post/7674905370994982927)
