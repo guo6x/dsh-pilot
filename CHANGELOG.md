@@ -2,6 +2,13 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.5.0] - 2026-08-25
+
+### Added
+
+- `pilot_wait_for` — polls until all supplied text, visible-selector, and/or URL conditions are met (up to 30 seconds), so agents can wait for asynchronous pages without guessing a sleep duration.
+- `pilot_assert` — checks the same conditions exactly once and returns explicit evidence for the agent's next decision.
+
 ## [0.4.1] - 2026-08-15
 
 ### Added

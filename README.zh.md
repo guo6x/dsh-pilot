@@ -40,6 +40,8 @@ dsh plugin --profile web add dsh-pilot
 | `pilot_back` | 后退一页，等页面落定后返回 URL/标题 |
 | `pilot_reload` | 刷新当前页，等页面落定 |
 | `pilot_wait` | 等待 N 毫秒（1–30000），让异步内容加载完再动手 |
+| `pilot_wait_for` | 等待页面文本、可见元素或 URL 条件满足，替代盲等 |
+| `pilot_assert` | 立即验证页面文本、可见元素或 URL 条件是否满足 |
 | `pilot_screenshot` | 存 PNG 并返回路径（给有视觉的模型或人看） |
 | `pilot_download` | 下载资源（默认当前页），走页面自己的 fetch——继承会话 Cookie；上限 20 MB |
 | `pilot_eval` | 页面里执行 JS，拿 JSON 结果 |

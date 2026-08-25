@@ -40,6 +40,8 @@ Requirements: DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome inst
 | `pilot_back` | Go back in history, waits for the page to settle, returns URL/title |
 | `pilot_reload` | Reload the current page, waits for it to settle |
 | `pilot_wait` | Wait N ms (1–30000) for async content before the next action |
+| `pilot_wait_for` | Wait until page text, a visible element, or a URL condition is met instead of sleeping blindly |
+| `pilot_assert` | Immediately verify page text, a visible element, or a URL condition |
 | `pilot_screenshot` | Save a PNG and return its path (for vision-capable models or the human) |
 | `pilot_download` | Download a resource (default: current page) through the page's own fetch — inherits session cookies; cap 20 MB |
 | `pilot_eval` | Evaluate JS in the page, get JSON back |

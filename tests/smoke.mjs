@@ -43,6 +43,15 @@ try {
   const waited = await pilot.wait(150)
   check('wait: ok', waited.ok === true && waited.waited === 150, JSON.stringify(waited))
 
+  const waitForText = await pilot.waitFor({ text: 'Example Domain', timeoutMs: 1000 })
+  check('waitFor: matches visible text', waitForText.ok === true && waitForText.textMatched === true, JSON.stringify(waitForText))
+
+  const asserted = await pilot.assert({ selector: 'a[href*="iana.org"]', urlIncludes: 'example.com' })
+  check('assert: matches selector and url', asserted.ok === true && asserted.selectorMatched && asserted.urlMatched, JSON.stringify(asserted))
+
+  const timedOut = await pilot.waitFor({ text: 'this text is not on example.com', timeoutMs: 100 })
+  check('waitFor: reports a timeout', timedOut.ok === false && /timed out/.test(timedOut.error), JSON.stringify(timedOut))
+
   // stale ref after navigation
   const stale = await pilot.click(999)
   check('click: stale ref fails gracefully', stale.ok === false && /stale|unknown/.test(stale.error), stale.error)
