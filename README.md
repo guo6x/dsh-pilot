@@ -14,27 +14,40 @@ Drive a **real browser** from the DeepSeek Harness chat: the agent opens pages, 
 - 👀 **Human in the loop** — live screenshot, URL bar, action log, and a session switcher in the cockpit; you see everything the agent does
 - 🧩 **Per-session isolation** — every agent session gets its own browser instance; parallel sessions never fight over one page
 
-## Install
+## Watch it work
+
+Open the ✈️ cockpit, start its isolated browser, and watch the page change live. When several agents are browsing, the demo also pins one session, then returns to automatic following.
+
+![dsh-pilot cockpit demo: browser control and session switching](docs/demo.gif)
+
+## Install — copy, paste, confirm
 
 ```sh
 # Install from GitHub — this is the supported release channel.
 dsh plugin --profile web add github:guo6x/dsh-pilot
-
-# From a local checkout while developing the plugin:
-# dsh plugin --profile web add .
 ```
 
-Restart `dsh web`, refresh the page. A ✈️ button appears at the sidebar foot — that opens the cockpit.
+Restart a running `dsh web` process, then refresh the page. **Installation is complete when a ✈️ button appears at the bottom of the sidebar.** Click it to open the cockpit.
 
-Requirements: DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome installed.
+Requirements: the DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome installed. The plugin needs no extra account, API key, or browser download.
 
-![demo](docs/demo.gif)
+Developing from a checkout instead? Run `dsh plugin --profile web add .` from the repository directory. The committed `lib/` files mean GitHub installs do not run a build script.
 
-## See it work in 60 seconds
+### First safe task
 
-After restarting `dsh web`, start a chat and ask in plain language:
+Start a new chat and paste this:
 
 > Open `https://example.com`, tell me what the page says, then verify that the “Learn more” link is visible.
+
+You should see a structured answer with the page title and a numbered link, while the cockpit shows the same page. This task only reads a public page.
+
+### If the ✈️ button is missing
+
+- Confirm the plugin is installed in the **web** profile: `dsh plugin --profile web list dsh-pilot`.
+- Restart the `dsh web` process after installing; a browser refresh alone cannot load new host code.
+- Check that Node is version 22 or newer and that Edge or Chrome is installed; the cockpit reports a launch error when neither is available.
+
+## See it work in 60 seconds
 
 For a real staging form, give the agent one bounded task:
 

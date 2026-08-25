@@ -2,6 +2,13 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.7.1] - 2026-08-25
+
+### Changed
+
+- Put a real cockpit recording and a copy-paste first-run path above the fold in both READMEs: install, restart, visible success signal, first safe task, and recovery steps.
+- Extend the demo recorder to show pinning a cockpit session and returning to automatic following when a multi-session fixture is available.
+
 ## [0.7.0] - 2026-08-25
 
 ### Added

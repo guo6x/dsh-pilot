@@ -14,27 +14,40 @@
 - 👀 **人在环中** —— 驾驶舱实时截图、地址栏、操作日志、会话切换器，agent 的一举一动都看得见
 - 🧩 **按会话隔离** —— 每个 agent 会话独立浏览器，并行会话互不抢页面
 
-## 安装
+## 先看它怎么工作
+
+打开 ✈️ 驾驶舱、启动隔离浏览器，页面变化全程可见。多个 agent 同时上网时，录屏还演示了锁定某个会话，再切回自动跟随。
+
+![dsh-pilot 驾驶舱演示：浏览器操控与会话切换](docs/demo.gif)
+
+## 安装——复制、粘贴、验收
 
 ```sh
 # 从 GitHub 直装——当前唯一受支持的发布渠道：
 dsh plugin --profile web add github:guo6x/dsh-pilot
-
-# 在本地 checkout 开发插件时：
-# dsh plugin --profile web add .
 ```
 
-重启 `dsh web`、刷新页面，侧边栏底部出现 ✈️ 按钮，点开即是驾驶舱。
+如果 `dsh web` 正在运行，重启它再刷新页面。**当侧边栏底部出现 ✈️ 按钮时，安装就完成了。**点开即是驾驶舱。
 
-要求：DSH web profile、Node ≥ 22、装了 Edge 或 Chrome。
+要求：DSH web profile、Node ≥ 22、装了 Edge 或 Chrome。插件不需要额外账号、API key 或下载浏览器。
 
-![demo](docs/demo.gif)
+从本地 checkout 开发？在仓库目录执行 `dsh plugin --profile web add .`。仓库已提交 `lib/` 构建产物，所以 GitHub 安装不会跑构建脚本。
 
-## 60 秒看到它工作
+### 第一条安全任务
 
-重启 `dsh web` 后，新开一个对话，直接用自然语言说：
+新开一个对话，直接粘贴：
 
 > 打开 `https://example.com`，告诉我页面写了什么，并确认 “Learn more” 链接可见。
+
+你会看到带页面标题和编号链接的结构化回答，同时驾驶舱会显示同一页面。这个任务只读取公开网页。
+
+### 如果看不到 ✈️ 按钮
+
+- 确认插件安装在 **web** profile：`dsh plugin --profile web list dsh-pilot`。
+- 安装后必须重启 `dsh web`；仅刷新浏览器不会加载新的宿主代码。
+- 确认 Node 为 22 或更新版本，且 Edge/Chrome 至少装了一个；两者都没有时驾驶舱会报告启动错误。
+
+## 60 秒看到它工作
 
 要验证真实的预发布表单，可以给 agent 一个有边界的任务：
 

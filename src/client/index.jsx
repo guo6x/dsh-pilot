@@ -139,11 +139,11 @@ function PilotPanel() {
 
   return React.createElement('div', { style, onPointerDown },
     React.createElement('div', { style: barStyle },
-      React.createElement('span', { style: { fontSize: 13, fontWeight: 700 } }, '🛩️ 浏览器驾驶舱'),
+      React.createElement('span', { style: { fontSize: 16, lineHeight: 1, whiteSpace: 'nowrap' }, title: '浏览器驾驶舱' }, '🛩️'),
       React.createElement('span', { style: { flex: 1 } }),
       state?.sessionOptions?.length > 1
         ? React.createElement('select', {
-            style: { maxWidth: 180, background: 'rgba(255,255,255,0.08)', color: '#e8eaf0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 5, padding: '3px 5px', fontSize: 11 },
+            style: { width: 160, minWidth: 0, background: 'rgba(255,255,255,0.08)', color: '#e8eaf0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 5, padding: '3px 5px', fontSize: 11 },
             value: state.selectedSession ?? 'latest',
             disabled: busy,
             title: '选择要在驾驶舱中查看的会话；“最近活跃”会自动跟随 agent',

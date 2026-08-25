@@ -16,7 +16,7 @@ node tests/smoke.mjs  # 25 end-to-end checks against a real headless Edge
 
 | Path | What it is |
 |---|---|
-| `src/index.js` | Host plugin: Cdp client, Pilot, PilotPool, routes, 11 tools |
+| `src/index.js` | Host plugin: Cdp client, Pilot, PilotPool, routes, 17 tools |
 | `src/client/index.jsx` | Cockpit panel (sidebar entry + draggable overlay) |
 | `lib/` | Built artifacts — **committed** (installs run without build scripts) |
 | `tests/smoke.mjs` | Real-browser end-to-end smoke test |

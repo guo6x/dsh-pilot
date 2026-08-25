@@ -37,6 +37,28 @@ async function mustType(pilot, selector, text, label) {
   console.log('type', label, JSON.stringify(text).slice(0, 60))
 }
 
+/**
+ * The regular demo still works with one session. When the fixture has several
+ * sessions, briefly pin an older one and return to automatic following so the
+ * recording also tells the cockpit-switcher story.
+ */
+async function switchCockpitSession(pilot, mode) {
+  const result = await pilot.evalJs(`(() => {
+    const select = document.querySelector('select[title*="会话"]')
+    if (!select) return null
+    const values = [...select.options].map(option => option.value)
+    const next = ${JSON.stringify(mode)} === 'latest'
+      ? 'latest'
+      : values.filter(value => value !== 'latest').at(-1)
+    if (!next || !values.includes(next)) return null
+    select.value = next
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    return next
+  })()`)
+  if (!result.ok) throw new Error(`session switch failed: ${result.error}`)
+  return typeof result.value === 'string' ? result.value : null
+}
+
 const gui = new Pilot()
 try {
   await gui.ensure()
@@ -75,6 +97,17 @@ try {
   await snap(gui, 'deepseek-live')
   await sleep(2000)
   await snap(gui, 'deepseek-live-2')
+
+  // 6. A multi-session fixture adds the switcher; normal one-session demos
+  // simply skip these two frames.
+  const pinned = await switchCockpitSession(gui, 'older')
+  if (pinned !== null) {
+    await sleep(1500)
+    await snap(gui, `session-pinned-${pinned}`)
+    await switchCockpitSession(gui, 'latest')
+    await sleep(1500)
+    await snap(gui, 'session-following-latest')
+  }
 
   console.log(`\nDONE: ${frameNo} frames in ${FRAMES}`)
 } finally {
