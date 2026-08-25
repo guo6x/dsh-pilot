@@ -17,9 +17,11 @@ Drive a **real browser** from the DeepSeek Harness chat: the agent opens pages, 
 ## Install
 
 ```sh
-dsh plugin --profile web add dsh-pilot
-# or straight from GitHub (same code, pinned to a commit):
-# dsh plugin --profile web add github:guo6x/dsh-pilot
+# Install from GitHub — this is the supported release channel.
+dsh plugin --profile web add github:guo6x/dsh-pilot
+
+# From a local checkout while developing the plugin:
+# dsh plugin --profile web add .
 ```
 
 Restart `dsh web`, refresh the page. A ✈️ button appears at the sidebar foot — that opens the cockpit.
@@ -27,6 +29,27 @@ Restart `dsh web`, refresh the page. A ✈️ button appears at the sidebar foot
 Requirements: DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome installed.
 
 ![demo](docs/demo.gif)
+
+## See it work in 60 seconds
+
+After restarting `dsh web`, start a chat and ask in plain language:
+
+> Open `https://example.com`, tell me what the page says, then verify that the “Learn more” link is visible.
+
+For a real staging form, give the agent one bounded task:
+
+> Open our staging application form. Fill the contact fields, upload the approved resume at `C:\\path\\to\\resume.pdf`, verify the entered values, and **stop before final submission**.
+
+The agent gets structured page evidence, uses labels and snapshot refs instead of brittle guesses, and the cockpit lets you watch or stop the browser at any time.
+
+## Why it feels different
+
+| What usually goes wrong | What dsh-pilot does instead |
+|---|---|
+| Agents guess CSS selectors that silently hit the wrong element | Returns a numbered, visible-element snapshot; actions use those refs and stale refs fail loudly |
+| Form tasks take many fragile one-field calls | `pilot_fill` resolves human-facing labels and fills text fields, textareas, and selects in one action |
+| Browser automation disappears into a black box | Shows a live cockpit with the current page, URL, status, and recent actions |
+| Adding browser control pulls in a browser framework and a cloud account | Uses Node 22’s native WebSocket plus the Edge/Chrome already on your machine — no runtime dependency or API key |
 
 ## What the agent gets
 
@@ -87,8 +110,7 @@ GUI cockpit ◀──/dsh-pilot/state + /dsh-pilot/shot.png (loopback)──┘
 
 ```sh
 pnpm install
-node build.mjs        # esbuild → lib/index.js (host ESM) + lib/client.js (ModuleLoader bundle)
-node tests/smoke.mjs  # real-headless-Edge end-to-end smoke test
+pnpm test             # build, real-headless-Edge flow, and package-content check
 ```
 
 MIT licensed. Found a bug or an idea? Open an issue.

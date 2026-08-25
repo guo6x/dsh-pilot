@@ -17,9 +17,11 @@
 ## 安装
 
 ```sh
-dsh plugin --profile web add dsh-pilot
-# 或从 GitHub 直装（同一份代码，锁定 commit）：
-# dsh plugin --profile web add github:guo6x/dsh-pilot
+# 从 GitHub 直装——当前唯一受支持的发布渠道：
+dsh plugin --profile web add github:guo6x/dsh-pilot
+
+# 在本地 checkout 开发插件时：
+# dsh plugin --profile web add .
 ```
 
 重启 `dsh web`、刷新页面，侧边栏底部出现 ✈️ 按钮，点开即是驾驶舱。
@@ -27,6 +29,27 @@ dsh plugin --profile web add dsh-pilot
 要求：DSH web profile、Node ≥ 22、装了 Edge 或 Chrome。
 
 ![demo](docs/demo.gif)
+
+## 60 秒看到它工作
+
+重启 `dsh web` 后，新开一个对话，直接用自然语言说：
+
+> 打开 `https://example.com`，告诉我页面写了什么，并确认 “Learn more” 链接可见。
+
+要验证真实的预发布表单，可以给 agent 一个有边界的任务：
+
+> 打开我们的 staging 报名表。填写联系信息，上传已授权的简历 `C:\\path\\to\\resume.pdf`，核对已填内容，**在最终提交前停下**。
+
+agent 拿到的是页面的结构化证据，用 label 和快照编号交互，不会盲猜；驾驶舱则让你随时围观或一键停止浏览器。
+
+## 它和普通浏览器自动化有什么不同
+
+| 常见翻车点 | dsh-pilot 的做法 |
+|---|---|
+| agent 猜 CSS 选择器，悄悄点错元素 | 返回可见元素的编号快照；动作按编号执行，过期编号会明确报错 |
+| 填一张表要反复逐字段调用 | `pilot_fill` 按人类字段名匹配，一次填写文本框、文本域和下拉框 |
+| 浏览器自动化像黑箱，人在外面看不见 | 驾驶舱实时显示页面、URL、状态和最近操作 |
+| 加浏览器能力要带框架和云端账号 | 直接使用 Node 22 原生 WebSocket + 本机 Edge/Chrome：零运行时依赖、零 API key |
 
 ## agent 得到的工具
 
@@ -87,8 +110,7 @@ GUI 驾驶舱 ◀──/dsh-pilot/state + /dsh-pilot/shot.png（仅回环）─�
 
 ```sh
 pnpm install
-node build.mjs        # esbuild → lib/index.js（宿主 ESM）+ lib/client.js（ModuleLoader 包）
-node tests/smoke.mjs  # 真 headless Edge 端到端冒烟测试
+pnpm test             # 构建、真 headless Edge 流程、发布包内容检查
 ```
 
 MIT 协议。发现问题或有好点子，直接提 issue。

@@ -2,6 +2,17 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.6.1] - 2026-08-25
+
+### Fixed
+
+- Make GitHub installation the primary documented command while npm publishing remains unavailable.
+- Verify the packed release contents in the standard test command, so every installable entrypoint is checked in CI.
+
+### Changed
+
+- Add copyable 60-second browser and bounded form-workflow prompts, plus an at-a-glance comparison of the ref-driven, human-visible control model.
+
 ## [0.6.0] - 2026-08-25
 
 ### Added
