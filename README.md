@@ -9,6 +9,7 @@ Drive a **real browser** from the DeepSeek Harness chat: the agent opens pages, 
 - 🔑 **No API key** — nothing leaves your machine; no vision model required
 - 📖 **Text-first by design** — the agent reads DOM snapshots (title/URL/text/links + numbered elements), so **text-only models** browse without burning vision tokens
 - 🎯 **Ref-driven interaction** — every click/type targets a snapshot ref, not a guessed selector; stale refs fail loudly with a hint
+- 📝 **Human-named forms** — fill several fields by label, aria-label, placeholder, name, or id, and upload files by ref
 - 🧭 **Full navigation set** — back, reload, and wait tools for real browsing flows, with page-settling waits built in
 - 👀 **Human in the loop** — live screenshot, URL bar, action log, and a session indicator in the cockpit; you see everything the agent does
 - 🧩 **Per-session isolation** — every agent session gets its own browser instance; parallel sessions never fight over one page
@@ -36,6 +37,8 @@ Requirements: DeepSeek Harness web profile, Node ≥ 22, and Edge or Chrome inst
 | `pilot_diff` | Report ONLY what changed since the last snapshot (URL/title/text delta, elements added/removed) — judge whether an action worked without re-reading the page |
 | `pilot_click` | Click an element **by its snapshot ref** (or CSS selector); scrolls into view first |
 | `pilot_type` | Type into an input **by its snapshot ref** (or selector) via the native value setter — React/Vue forms observe it |
+| `pilot_fill` | Fill text inputs, textareas, and selects in one call by label/aria-label/placeholder/name/id |
+| `pilot_upload` | Upload 1–10 absolute-path files to a file input **by its snapshot ref** (or selector); 100 MB total cap |
 | `pilot_press` | Press a key (Enter/Tab/Escape/arrows/single chars) |
 | `pilot_back` | Go back in history, waits for the page to settle, returns URL/title |
 | `pilot_reload` | Reload the current page, waits for it to settle |
@@ -69,7 +72,7 @@ GUI cockpit ◀──/dsh-pilot/state + /dsh-pilot/shot.png (loopback)──┘
 ```
 
 - Launches `msedge`/`chrome` headless with an isolated `--user-data-dir` under the OS temp dir and a dynamically picked debugging port (9222+); the whole tree is killed and the profile removed on stop.
-- The host registers 8 tools plus a loopback-only HTTP API (`/dsh-pilot/*`, 403 for non-loopback clients).
+- The host registers 17 tools plus a loopback-only HTTP API (`/dsh-pilot/*`, 403 for non-loopback clients).
 - The client is a small overlay panel registered in `sidebar.footer.action` + `shell.overlay`.
 
 ## Security
@@ -77,6 +80,7 @@ GUI cockpit ◀──/dsh-pilot/state + /dsh-pilot/shot.png (loopback)──┘
 - Browser runs **headless with an isolated profile**; it never touches your real browser session.
 - The HTTP API binds to the DSH server (loopback by default) and rejects non-loopback clients explicitly.
 - `pilot_open` accepts http(s) URLs only; `pilot_eval` runs page-context JS (same trust as opening DevTools yourself — do not point the agent at pages you don't trust).
+- `pilot_upload` accepts existing absolute regular files only; upload only files the user has authorized for the current site.
 - No telemetry, no network calls to third parties, no API keys.
 
 ## Develop

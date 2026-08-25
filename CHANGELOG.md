@@ -2,6 +2,14 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.6.0] - 2026-08-25
+
+### Added
+
+- `pilot_fill` — fills up to 20 text inputs, textareas, and selects in one call by their visible label, aria-label, placeholder, name, or id. Values go through native setters and input/change events without entering the action log.
+- `pilot_upload` — assigns one to ten existing absolute-path files to a file input through CDP, by snapshot ref or CSS selector; regular files only, 100 MB total cap.
+- End-to-end local-form coverage for label-driven filling, select choices, file-input assignment, and the resulting `change` event.
+
 ## [0.5.0] - 2026-08-25
 
 ### Added

@@ -1,6 +1,6 @@
 # dsh-pilot — DESIGN
 
-让 DSH agent 亲自上网的浏览器操控插件。纯文本模型也能用：读 DOM/结构化文本快照，不烧截图 token。人在 Web GUI 实时围观、随时接管。当前版本 v0.5.0。
+让 DSH agent 亲自上网的浏览器操控插件。纯文本模型也能用：读 DOM/结构化文本快照，不烧截图 token。人在 Web GUI 实时围观、随时接管。当前版本 v0.6.0。
 
 ## 定位
 
@@ -22,13 +22,13 @@ GUI 驾驶舱 ◀──/dsh-pilot/state + /dsh-pilot/shot.png（仅回环 403 �
 - `Cdp`：原生 WebSocket 的 CDP 客户端（id→promise + once 事件等待）
 - `Pilot`：一个浏览器实例的生命周期与操作集
   - launch：headless Edge/Chrome + 独立 `--user-data-dir`（OS 临时目录）+ 动态调试端口
-  - 操作：navigate / snapshot / click / type / press / back / reload / wait / waitFor / assert / screenshot / evalJs / download / stop
+  - 操作：navigate / snapshot / click / type / fill / upload / press / back / reload / wait / waitFor / assert / screenshot / evalJs / download / stop
   - 截图缓存：`lastShot` 内存 Buffer，面板路由直出
 - `PilotPool`：sessionId → Pilot 映射；每次工具调用设 primary（面板跟随最近活跃）；超 8 个按 LRU 淘汰非 primary
 - 路由（webServer，prefix `/dsh-pilot`，非回环 403）：GET state / shot.png；POST start / stop / navigate
   - `/state` 附带 `session`（当前 primary key）与 `sessions`（池大小）
-- 工具 15 个（`inject: ['webServer', 'tools']` 保证服务就绪后才注册）：
-  open / snapshot / diff / click / type / press / back / reload / wait / wait_for / assert / screenshot / eval / download / close
+- 工具 17 个（`inject: ['webServer', 'tools']` 保证服务就绪后才注册）：
+  open / snapshot / diff / click / type / fill / upload / press / back / reload / wait / wait_for / assert / screenshot / eval / download / close
 - 清理：ctx.effect 包裹路由注册、工具注册与 `pool.disposeAll()`
 
 ### 元素引用（ref）模型
@@ -45,6 +45,7 @@ GUI 驾驶舱 ◀──/dsh-pilot/state + /dsh-pilot/shot.png（仅回环 403 �
 - 教训：先注册后动作——load 事件可能比监听注册更快到达（0.2.x 竞态 bug）
 - `once()` 超时永不 reject（`.catch(() => {})`），waitForLoad 永不抛
 - `wait_for` 轮询文本、可见 selector 和 URL；每个已提供条件都必须满足，失败会带回最后观测状态。
+- `fill` 按用户可见字段名批量匹配并填写；`upload` 用 CDP 赋给真正的 file input，限制为已存在的绝对路径普通文件、最多 10 个/100 MB。
 
 ### 客户端（驾驶舱面板）
 
@@ -64,7 +65,7 @@ GUI 驾驶舱 ◀──/dsh-pilot/state + /dsh-pilot/shot.png（仅回环 403 �
 
 ## 测试
 
-- `tests/smoke.mjs`：真 headless Edge 端到端——导航/快照/编号元素/ref 点击/落定/条件等待与断言/过期 ref/截图建目录/下载/池隔离/primary/部分停止
+- `tests/smoke.mjs`：真 headless Edge 端到端——导航/快照/编号元素/ref 点击/落定/条件等待与断言/标签填表/select/文件上传/change 事件/过期 ref/截图建目录/下载/池隔离/primary/部分停止
 - `demo/record-demo.mjs`：驾驶舱全真实链路录制（断言每次点击/输入）
 - 运行：`node build.mjs && node tests/smoke.mjs`
 
@@ -80,7 +81,7 @@ GUI 驾驶舱 ◀──/dsh-pilot/state + /dsh-pilot/shot.png（仅回环 403 �
 
 ## 可能的下一步（未排期）
 
-- 上传文件与弹窗/新标签页处理
-- 表单填写助手（按 label 匹配输入）
+- 弹窗与新标签页处理
+- checkbox/radio 与可访问性树定位
 - 可选域名白名单和敏感操作策略
 - 面板多会话切换器

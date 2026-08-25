@@ -9,6 +9,7 @@
 - 🔑 **无需 API key** —— 什么都不出本机，不需要视觉模型
 - 📖 **文本优先设计** —— agent 读的是 DOM 快照（标题/URL/正文/链接 + 编号元素），**纯文本模型**照样上网，不烧视觉 token
 - 🎯 **按编号交互** —— 点击/输入全部指向快照编号，过期编号报错并提示重取快照
+- 📝 **表单更懂人话** —— 可按 label、aria-label、placeholder、name 或 id 一次填写多个字段，也能按编号上传文件
 - 🧭 **完整导航套件** —— 后退、刷新、等待工具 + 内置页面落定等待，真实上网流程全覆盖
 - 👀 **人在环中** —— 驾驶舱实时截图、地址栏、操作日志、会话指示，agent 的一举一动都看得见
 - 🧩 **按会话隔离** —— 每个 agent 会话独立浏览器，并行会话互不抢页面
@@ -36,6 +37,8 @@ dsh plugin --profile web add dsh-pilot
 | `pilot_diff` | 只报告相对上次快照的变化（URL/标题/文本增量、新增/消失的元素）——不重读整页就能判断动作是否生效 |
 | `pilot_click` | 按**快照编号**（或 CSS 选择器）点击元素，先滚动到可视区 |
 | `pilot_type` | 按**快照编号**（或选择器）往输入框打字（原生 value setter，React/Vue 表单能感知） |
+| `pilot_fill` | 按字段 label/aria-label/placeholder/name/id 批量填写文本框、文本域和下拉框 |
+| `pilot_upload` | 按**快照编号**（或选择器）向文件输入上传 1–10 个绝对路径文件（总计上限 100 MB） |
 | `pilot_press` | 按键（Enter/Tab/Escape/方向键/单个字符） |
 | `pilot_back` | 后退一页，等页面落定后返回 URL/标题 |
 | `pilot_reload` | 刷新当前页，等页面落定 |
@@ -69,7 +72,7 @@ GUI 驾驶舱 ◀──/dsh-pilot/state + /dsh-pilot/shot.png（仅回环）─�
 ```
 
 - 以 headless 模式启动 `msedge`/`chrome`，独立 `--user-data-dir`（OS 临时目录），调试端口 9222 起动态选；停止时整棵进程树杀掉、临时 profile 删除。
-- 宿主注册 8 个工具 + 仅回环的 HTTP API（`/dsh-pilot/*`，非回环客户端一律 403）。
+- 宿主注册 17 个工具 + 仅回环的 HTTP API（`/dsh-pilot/*`，非回环客户端一律 403）。
 - 客户端是注册在 `sidebar.footer.action` + `shell.overlay` 的小浮窗。
 
 ## 安全说明
@@ -77,6 +80,7 @@ GUI 驾驶舱 ◀──/dsh-pilot/state + /dsh-pilot/shot.png（仅回环）─�
 - 浏览器以 **headless + 独立 profile** 运行，绝不碰你真实浏览器会话。
 - HTTP API 只挂在 DSH 服务（默认回环地址），并显式拒绝非回环客户端。
 - `pilot_open` 只收 http(s) URL；`pilot_eval` 在页面上下文执行 JS（相当于你自己开 DevTools——别让 agent 去你不信任的页面）。
+- `pilot_upload` 只接收现有的绝对路径普通文件；仅把用户已授权的文件上传到当前站点。
 - 无遥测、无第三方网络调用、无 API key。
 
 ## 开发
