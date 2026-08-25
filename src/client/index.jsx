@@ -141,8 +141,22 @@ function PilotPanel() {
     React.createElement('div', { style: barStyle },
       React.createElement('span', { style: { fontSize: 13, fontWeight: 700 } }, '🛩️ 浏览器驾驶舱'),
       React.createElement('span', { style: { flex: 1 } }),
-      state?.sessions > 1
-        ? React.createElement('span', { style: { fontSize: 10, opacity: 0.55 }, title: `当前显示最近活跃会话的浏览器，共 ${state.sessions} 个会话` }, `×${state.sessions}`)
+      state?.sessionOptions?.length > 1
+        ? React.createElement('select', {
+            style: { maxWidth: 180, background: 'rgba(255,255,255,0.08)', color: '#e8eaf0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 5, padding: '3px 5px', fontSize: 11 },
+            value: state.selectedSession ?? 'latest',
+            disabled: busy,
+            title: '选择要在驾驶舱中查看的会话；“最近活跃”会自动跟随 agent',
+            onPointerDown: event => event.stopPropagation(),
+            onChange: event => run('select-session', { session: event.target.value }),
+          }, [
+            React.createElement('option', { key: 'latest', value: 'latest' }, '最近活跃'),
+            ...state.sessionOptions.map(option => React.createElement(
+              'option',
+              { key: option.id, value: option.id },
+              `${option.primary ? '● ' : ''}${option.id}${option.title ? ` — ${option.title.slice(0, 40)}` : ''}`,
+            )),
+          ])
         : null,
       React.createElement('span', { style: { fontSize: 11, opacity: 0.7 } }, state?.status ?? '…'),
       React.createElement('button', { style: btnStyle, onClick: () => setOpen(false), title: '收起' }, '×'),

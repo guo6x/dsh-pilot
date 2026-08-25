@@ -1,7 +1,7 @@
 {
   "name": "dsh-pilot",
   "description": "Drive a real browser from the DSH Web GUI: agent tools + live cockpit panel.",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "entry": {
     "name": "dsh-pilot",
     "inject": []

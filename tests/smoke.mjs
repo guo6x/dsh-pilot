@@ -144,6 +144,11 @@ try {
   check('pool: b independent', b.url.includes('DeepSeek'), b.url)
   check('pool: distinct ports', a.port !== b.port, `${a.port} vs ${b.port}`)
   check('pool: primary tracks last use', pool.panelPilot() === b)
+  check('pool: can pin cockpit to a session', pool.selectPanelSession('session-a') === true && pool.panelPilot() === a)
+  pool.for('session-b')
+  check('pool: pin survives newer activity', pool.panelPilot() === a)
+  check('pool: latest restores automatic following', pool.selectPanelSession('latest') === true && pool.panelPilot() === b)
+  check('pool: rejects unknown cockpit session', pool.selectPanelSession('missing-session') === false && pool.panelPilot() === b)
   await a.stop()
   check('pool: stopping a leaves b ready', b.status === 'ready')
 } catch (error) {

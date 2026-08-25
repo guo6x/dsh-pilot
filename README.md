@@ -11,7 +11,7 @@ Drive a **real browser** from the DeepSeek Harness chat: the agent opens pages, 
 - 🎯 **Ref-driven interaction** — every click/type targets a snapshot ref, not a guessed selector; stale refs fail loudly with a hint
 - 📝 **Human-named forms** — fill several fields by label, aria-label, placeholder, name, or id, and upload files by ref
 - 🧭 **Full navigation set** — back, reload, and wait tools for real browsing flows, with page-settling waits built in
-- 👀 **Human in the loop** — live screenshot, URL bar, action log, and a session indicator in the cockpit; you see everything the agent does
+- 👀 **Human in the loop** — live screenshot, URL bar, action log, and a session switcher in the cockpit; you see everything the agent does
 - 🧩 **Per-session isolation** — every agent session gets its own browser instance; parallel sessions never fight over one page
 
 ## Install
@@ -77,13 +77,13 @@ The agent just says what it needs: *"open the login page, fill the form, click s
 
 ## What the human gets
 
-A draggable cockpit overlay: live screenshot (2 s refresh), current URL + title, 启动/关闭 buttons, an address bar, the recent action log, and a session indicator when several sessions are browsing. Everything the agent does is visible; close the browser or take over whenever you like.
+A draggable cockpit overlay: live screenshot (2 s refresh), current URL + title, start/stop buttons, an address bar, and the recent action log. When several sessions are browsing, choose one to inspect or leave it on **Latest activity** to follow the agent automatically. Everything the agent does is visible; close the browser or take over whenever you like.
 
 ## Known limitations
 
 - **One tab per session.** Refs are pinned to the current page, so a tab switcher would invalidate them. Need a second context? Spawn a subagent — each agent session gets its own browser.
 - **Headless only.** The cockpit shows the headless view; there is no headed mode (a human driving the same browser is a different product).
-- **The panel shows the most recently used session's browser.** Each session still owns its own instance — the panel just follows the last one that acted.
+- **The panel follows the most recently used session by default.** When several sessions exist, you can pin the cockpit to any one of them; switch back to **Latest activity** to resume automatic following.
 
 ## How it works
 

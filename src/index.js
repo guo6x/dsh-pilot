@@ -770,6 +770,7 @@ export class PilotPool {
   constructor() {
     this.pilots = new Map()
     this.primary = null
+    this.panelSession = null
   }
 
   for(sessionKey) {
@@ -785,17 +786,57 @@ export class PilotPool {
   }
 
   panelPilot() {
-    if (this.primary !== null && this.pilots.has(this.primary)) return this.pilots.get(this.primary)
+    const key = this.panelKey()
+    if (key !== null) return this.pilots.get(key)
     return this.for('default')
+  }
+
+  /** The session currently shown in the cockpit, if the pool has one. */
+  panelKey() {
+    if (this.panelSession !== null && this.pilots.has(this.panelSession)) return this.panelSession
+    this.panelSession = null
+    if (this.primary !== null && this.pilots.has(this.primary)) return this.primary
+    return null
+  }
+
+  /**
+   * Pin the cockpit to a session, or pass "latest" to follow agent activity again.
+   * Returns false rather than creating a browser for an unknown session.
+   */
+  selectPanelSession(sessionKey) {
+    if (sessionKey === 'latest') {
+      this.panelSession = null
+      return true
+    }
+    if (!this.pilots.has(sessionKey)) return false
+    this.panelSession = sessionKey
+    return true
+  }
+
+  /** Lightweight session metadata for the cockpit switcher. */
+  panelSessions() {
+    const selected = this.panelKey()
+    return [...this.pilots.entries()]
+      .sort((a, b) => b[1].lastUsedAt - a[1].lastUsedAt)
+      .map(([id, pilot]) => ({
+        id,
+        status: pilot.status,
+        title: pilot.title,
+        url: pilot.url,
+        primary: id === this.primary,
+        selected: id === selected,
+      }))
   }
 
   gc() {
     if (this.pilots.size <= POOL_CAP) return
     const candidates = [...this.pilots.entries()]
-      .filter(([key]) => key !== this.primary)
+      .filter(([key]) => key !== this.primary && key !== this.panelSession)
       .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
+    if (candidates.length === 0) return
     const [key, pilot] = candidates[0]
     this.pilots.delete(key)
+    if (key === this.panelSession) this.panelSession = null
     void pilot.dispose()
   }
 
@@ -803,6 +844,7 @@ export class PilotPool {
     const pilots = [...this.pilots.values()]
     this.pilots.clear()
     this.primary = null
+    this.panelSession = null
     for (const pilot of pilots) await pilot.dispose()
   }
 }
@@ -933,11 +975,21 @@ export function apply(ctx) {
         }
         const pathname = new URL(req.url ?? '/', 'http://x').pathname
         const suffix = pathname.slice('/dsh-pilot'.length) || '/'
-        const pilot = pool.panelPilot()
+        const cockpitState = () => {
+          const panelPilot = pool.panelPilot()
+          return {
+            ...panelPilot.state(),
+            session: pool.panelKey() ?? 'default',
+            sessions: pool.pilots.size,
+            sessionOptions: pool.panelSessions(),
+            selectedSession: pool.panelSession ?? 'latest',
+          }
+        }
         try {
           if (req.method === 'GET' && suffix === '/state') {
-            sendJson(res, 200, { ...pilot.state(), session: pool.primary ?? 'default', sessions: pool.pilots.size })
+            sendJson(res, 200, cockpitState())
           } else if (req.method === 'GET' && suffix === '/shot.png') {
+            const pilot = pool.panelPilot()
             if (pilot.lastShot === null) {
               res.writeHead(204, { 'cache-control': 'no-store' })
               res.end()
@@ -945,20 +997,30 @@ export function apply(ctx) {
               res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' })
               res.end(pilot.lastShot)
             }
+          } else if (req.method === 'POST' && suffix === '/select-session') {
+            const body = JSON.parse(await readBody(req) || '{}')
+            if (typeof body.session !== 'string' || !pool.selectPanelSession(body.session)) {
+              sendJson(res, 400, { error: 'session must be "latest" or a known session id' })
+              return
+            }
+            sendJson(res, 200, cockpitState())
           } else if (req.method === 'POST' && suffix === '/start') {
+            const pilot = pool.panelPilot()
             await pilot.withOp(() => pilot.ensure())
-            sendJson(res, 200, pilot.state())
+            sendJson(res, 200, cockpitState())
           } else if (req.method === 'POST' && suffix === '/stop') {
+            const pilot = pool.panelPilot()
             await pilot.withOp(() => pilot.stop())
-            sendJson(res, 200, pilot.state())
+            sendJson(res, 200, cockpitState())
           } else if (req.method === 'POST' && suffix === '/navigate') {
+            const pilot = pool.panelPilot()
             const body = JSON.parse(await readBody(req) || '{}')
             if (typeof body.url !== 'string' || !/^https?:\/\//.test(body.url)) {
               sendJson(res, 400, { error: 'url must be an http(s) URL' })
               return
             }
             await pilot.withOp(() => pilot.navigate(body.url))
-            sendJson(res, 200, pilot.state())
+            sendJson(res, 200, cockpitState())
           } else {
             sendJson(res, 404, { error: 'no such endpoint' })
           }

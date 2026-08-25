@@ -2,6 +2,13 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.7.0] - 2026-08-25
+
+### Added
+
+- A cockpit session switcher: choose any live agent session to inspect its isolated browser, or choose **Latest activity** to follow the most recently active one automatically.
+- The cockpit state endpoint now provides lightweight session metadata and accepts a loopback-only session-selection request. Existing `sessions` and `session` fields remain available for older clients.
+
 ## [0.6.1] - 2026-08-25
 
 ### Fixed
