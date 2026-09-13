@@ -107,7 +107,7 @@ DSH chat ──pilot_* tools──▶ host plugin ──CDP (native WebSocket)�
 GUI cockpit ◀──/dsh-pilot/state + /dsh-pilot/shot.png (loopback)──┘
 ```
 
-- Launches `msedge`/`chrome` headless with an isolated `--user-data-dir` under the OS temp dir and a dynamically picked debugging port (9222+); the whole tree is killed and the profile removed on stop.
+- Launches `msedge`/`chrome` headless with an isolated `--user-data-dir` under the OS temp dir and a dynamically picked debugging port (9222+); the whole tree is killed and the profile removed on stop, with the removal retried and reported rather than swallowed. Every launch also sweeps the temp dir for profiles abandoned by an earlier force-killed host.
 - The host registers 17 tools plus a loopback-only HTTP API (`/dsh-pilot/*`, 403 for non-loopback clients).
 - The client is a small overlay panel registered in `sidebar.footer.action` + `shell.overlay`.
 

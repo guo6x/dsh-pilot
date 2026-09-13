@@ -107,7 +107,7 @@ DSH 对话 ──pilot_* 工具──▶ 宿主插件 ──CDP(原生 WebSocket
 GUI 驾驶舱 ◀──/dsh-pilot/state + /dsh-pilot/shot.png（仅回环）──┘
 ```
 
-- 以 headless 模式启动 `msedge`/`chrome`，独立 `--user-data-dir`（OS 临时目录），调试端口 9222 起动态选；停止时整棵进程树杀掉、临时 profile 删除。
+- 以 headless 模式启动 `msedge`/`chrome`，独立 `--user-data-dir`（OS 临时目录），调试端口 9222 起动态选；停止时整棵进程树杀掉、临时 profile 删除，删除失败会重试并上报而不是被吞掉。每次启动还会清扫临时目录里被上一次强杀留下的旧 profile。
 - 宿主注册 17 个工具 + 仅回环的 HTTP API（`/dsh-pilot/*`，非回环客户端一律 403）。
 - 客户端是注册在 `sidebar.footer.action` + `shell.overlay` 的小浮窗。
 

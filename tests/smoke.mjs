@@ -2,9 +2,12 @@
  * dsh-pilot host smoke test: real headless Edge end-to-end, v0.2.
  * Run: node tests/smoke.mjs
  */
-import { Pilot, PilotPool } from '../lib/index.js'
-import { rm, writeFile } from 'node:fs/promises'
+import { Pilot, PilotPool, gcStaleProfiles } from '../lib/index.js'
+import { existsSync } from 'node:fs'
+import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
+import { createServer as createNetServer } from 'node:net'
 import { once } from 'node:events'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -156,6 +159,97 @@ try {
   console.error('FATAL pool', error)
 } finally {
   await pool.disposeAll()
+}
+
+// ---- profile lifecycle: stop, unexpected exit, start-up sweep ----
+const waitForGone = async (dir, timeoutMs) => {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline && existsSync(dir)) await new Promise(resolve => setTimeout(resolve, 200))
+  return !existsSync(dir)
+}
+
+const killTree = async pilot => {
+  const pid = pilot.child.pid
+  if (process.platform === 'win32') {
+    const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+    await once(killer, 'exit')
+    return
+  }
+  process.kill(pid, 'SIGKILL')
+}
+
+{
+  const solo = new Pilot()
+  try {
+    await solo.navigate('https://example.com')
+    const dir = solo.profileDir
+    check('profile: created under the temp dir', typeof dir === 'string' && dir.includes('dsh-pilot-'), String(dir))
+    await solo.dispose()
+    check('profile: removed on stop', dir !== null && !existsSync(dir), String(dir))
+    check('profile: path dropped only after confirmed removal', solo.profileDir === null)
+  } catch (error) {
+    failed++
+    console.error('FATAL profile stop', error)
+  } finally {
+    await solo.dispose()
+  }
+}
+
+{
+  const crashed = new Pilot()
+  try {
+    await crashed.navigate('https://example.com')
+    const dir = crashed.profileDir
+    await killTree(crashed)
+    check('profile: reclaimed after an unexpected browser exit', await waitForGone(dir, 10000), String(dir))
+  } catch (error) {
+    failed++
+    console.error('FATAL profile crash', error)
+  } finally {
+    await crashed.dispose()
+  }
+}
+
+{
+  const blockers = [createNetServer(), createNetServer()]
+  try {
+    let port = 9340
+    for (const blocker of blockers) {
+      blocker.listen(port++, '127.0.0.1')
+      await once(blocker, 'listening')
+    }
+    const picked = await new Pilot().pickPort(9340)
+    check('port: occupied debug ports are skipped', picked >= 9342, `${picked} with 9340-9341 blocked`)
+  } catch (error) {
+    failed++
+    console.error('FATAL port pick', error)
+  } finally {
+    for (const blocker of blockers) blocker.close()
+  }
+}
+
+{
+  try {
+    const stale = await mkdtemp(join(tmpdir(), 'dsh-pilot-'))
+    await writeFile(join(stale, 'Default'), 'chromium profile leftover')
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    await utimes(stale, old, old)
+    await gcStaleProfiles()
+    check('sweep: reclaims a stale profile', !existsSync(stale), String(stale))
+
+    const fresh = await mkdtemp(join(tmpdir(), 'dsh-pilot-'))
+    await gcStaleProfiles()
+    check('sweep: leaves a fresh profile alone', existsSync(fresh), String(fresh))
+    const fixture = await mkdtemp(join(tmpdir(), 'dsh-pilot-nested-'))
+    await utimes(fixture, old, old)
+    await gcStaleProfiles()
+    check('sweep: ignores non-profile fixtures', existsSync(fixture), String(fixture))
+    await rm(fresh, { recursive: true, force: true })
+    await rm(fixture, { recursive: true, force: true })
+  } catch (error) {
+    failed++
+    console.error('FATAL sweep', error)
+  }
 }
 
 console.log(`\n${failed === 0 ? 'ALL PASS' : `${failed} FAILURES`}`)
