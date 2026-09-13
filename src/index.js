@@ -15,7 +15,8 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 
@@ -44,8 +45,99 @@ const MAX_FILL_FIELDS = 20
 const MAX_UPLOAD_FILES = 10
 const NAV_TIMEOUT_MS = 20000
 const POOL_CAP = 8
+const PROFILE_PREFIX = 'dsh-pilot-'
+/** Exactly what mkdtemp produces, so unrelated fixtures under the same prefix are never swept. */
+const PROFILE_DIR_PATTERN = /^dsh-pilot-[A-Za-z0-9]{6}$/
+/** Stop-time removal attempts: one try plus retries, because Windows releases crashpad/GPU handles late. */
+const PROFILE_REMOVE_ATTEMPTS = 4
+/** Backoff base between removal attempts (attempt N waits N x this). */
+const PROFILE_REMOVE_BACKOFF_MS = 200
+/** A start-up sweep only touches profiles older than this, so a concurrent instance keeps its own. */
+const STALE_PROFILE_AGE_MS = 60 * 60 * 1000
+/** Sweep attempts for one queued directory before the age-based pass takes over. */
+const PROFILE_BACKLOG_ATTEMPTS = 3
+
+/** Profile dirs this process created and has not confirmed deleting. */
+const liveProfileDirs = new Set()
+/** Dirs whose stop-time removal failed: retried on the next launch, then by age. */
+const profileCleanupBacklog = new Map()
+let profileSweepStarted = false
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * Whether 127.0.0.1:port can still be bound — the only authoritative free-port
+ * test. An HTTP probe is not: a busy browser can miss the probe window, and a
+ * port reported free that way is how a pilot used to attach itself to another
+ * session's browser instead of starting its own.
+ */
+function canBind(port) {
+  return new Promise(resolve => {
+    const probe = createServer()
+    probe.unref()
+    probe.once('error', () => resolve(false))
+    probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)))
+  })
+}
+
+/**
+ * Delete one browser profile directory, retrying while Windows lets go of the
+ * handles its crashpad/GPU children still hold. Returns whether the path is
+ * gone; `force: true` makes an already-absent path a success.
+ */
+async function removeProfileDir(dir, note) {
+  let lastError = null
+  for (let attempt = 1; attempt <= PROFILE_REMOVE_ATTEMPTS; attempt++) {
+    try {
+      await rm(dir, { recursive: true, force: true })
+      return true
+    } catch (error) {
+      lastError = error
+      if (attempt < PROFILE_REMOVE_ATTEMPTS) await sleep(PROFILE_REMOVE_BACKOFF_MS * attempt)
+    }
+  }
+  const reason = lastError?.code ?? lastError?.message ?? 'unknown error'
+  note?.('warn', `browser profile ${dir} could not be removed (${reason}); queued for the next start-up sweep`)
+  return false
+}
+
+/**
+ * Reclaim abandoned browser profiles. First retry what this process could not
+ * delete at stop time, then sweep `dsh-pilot-*` directories old enough that no
+ * live launch can own them — the only self-healing path after a hard-killed
+ * host, which never reaches the pool's disposal.
+ */
+export async function gcStaleProfiles() {
+  for (const [dir, attempts] of [...profileCleanupBacklog]) {
+    if (liveProfileDirs.has(dir)) {
+      profileCleanupBacklog.delete(dir)
+      continue
+    }
+    if (await removeProfileDir(dir)) profileCleanupBacklog.delete(dir)
+    else if (attempts + 1 >= PROFILE_BACKLOG_ATTEMPTS) profileCleanupBacklog.delete(dir)
+    else profileCleanupBacklog.set(dir, attempts + 1)
+  }
+  let entries = []
+  try {
+    entries = await readdir(tmpdir(), { withFileTypes: true })
+  } catch {
+    return
+  }
+  const cutoff = Date.now() - STALE_PROFILE_AGE_MS
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !PROFILE_DIR_PATTERN.test(entry.name)) continue
+    const dir = join(tmpdir(), entry.name)
+    if (liveProfileDirs.has(dir) || profileCleanupBacklog.has(dir)) continue
+    let modified = 0
+    try {
+      modified = (await stat(dir)).mtimeMs
+    } catch {
+      continue
+    }
+    if (modified > cutoff) continue
+    await removeProfileDir(dir)
+  }
+}
 
 /** Minimal CDP client over the native WebSocket. */
 export class Cdp {
@@ -163,12 +255,7 @@ export class Pilot {
 
   async pickPort(base = 9222) {
     for (let port = base; port < base + 40; port++) {
-      try {
-        await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(400) })
-        continue // occupied — try the next port
-      } catch {
-        return port
-      }
+      if (await canBind(port)) return port
     }
     return null
   }
@@ -183,12 +270,20 @@ export class Pilot {
     if (this.status === 'ready' && this.cdp !== null) return
     if (this.status === 'starting') throw new Error('pilot: browser still starting, retry shortly')
     this.status = 'starting'
+    if (!profileSweepStarted) {
+      profileSweepStarted = true
+      void gcStaleProfiles()
+    }
     this.note('info', 'launching browser')
     const edge = this.findEdge()
     const port = await this.pickPort()
     if (port === null) throw new Error('pilot: no free debugging port in 9222..9262')
     this.port = port
-    this.profileDir = await mkdtemp(join(tmpdir(), 'dsh-pilot-'))
+    // A previous stop that could not delete its profile keeps that path; retry
+    // it here so the new browser does not make the old directory forgettable.
+    if (this.profileDir !== null) await this.releaseProfile()
+    this.profileDir = await mkdtemp(join(tmpdir(), PROFILE_PREFIX))
+    liveProfileDirs.add(this.profileDir)
     const argv = [
       '--headless=new',
       '--disable-gpu',
@@ -209,7 +304,22 @@ export class Pilot {
       if (!wasStopping) {
         this.lastError = `browser exited (code=${code} signal=${signal ?? 'none'})`
         this.note('error', this.lastError)
+        // An unexpected exit owns a profile too: without this the directory
+        // outlives the browser and nothing ever revisits it.
+        void this.releaseProfile()
       }
+    })
+    this.child.once('error', error => {
+      const wasStopping = this.stopping
+      this.child = null
+      this.cdp?.close()
+      this.cdp = null
+      this.status = 'error'
+      if (!wasStopping) {
+        this.lastError = `browser failed to start: ${error?.message ?? error}`
+        this.note('error', this.lastError)
+      }
+      void this.releaseProfile()
     })
     try {
       await this.waitForVersion(port)
@@ -231,14 +341,26 @@ export class Pilot {
   }
 
   async waitForVersion(port) {
+    let foreign = false
     for (let i = 0; i < 60; i++) {
       await sleep(500)
       try {
         const res = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1500) })
-        if (res.ok) return res.json()
+        if (!res.ok) continue
+        const version = await res.json()
+        // Own the endpoint: a browser answering on this port that is not the
+        // child just spawned belongs to another session, and driving it would
+        // hand this session's navigation to a stranger's page.
+        if (!String(version.webSocketDebuggerUrl ?? '').includes(`:${port}/`)) {
+          foreign = true
+          continue
+        }
+        return version
       } catch {}
     }
-    throw new Error('pilot: browser did not expose the debugging endpoint in time')
+    throw new Error(foreign
+      ? `pilot: port ${port} is answering for another browser session; retry to pick a free port`
+      : 'pilot: browser did not expose the debugging endpoint in time')
   }
 
   async newTab(port, url) {
@@ -748,16 +870,40 @@ export class Pilot {
           child.kill('SIGKILL')
         }
       } catch {}
+      // taskkill resolves when the kill is issued, not when the tree is gone:
+      // the profile's handles are released a moment later, so wait for the
+      // browser process itself before the first removal attempt.
+      for (let waited = 0; waited < 3000 && child.exitCode === null && child.signalCode === null; waited += 50) {
+        await sleep(50)
+      }
     }
-    if (this.profileDir !== null) {
-      await rm(this.profileDir, { recursive: true, force: true }).catch(() => {})
-      this.profileDir = null
-    }
+    if (this.profileDir !== null) await this.releaseProfile()
     this.status = 'stopped'
     this.url = ''
     this.title = ''
     this.note('info', 'browser stopped')
     this.stopping = false
+  }
+
+  /**
+   * Remove this session's profile directory. The path is dropped only once the
+   * deletion is confirmed; a failure is logged and queued for the next sweep
+   * instead of being swallowed, which is how orphans used to accumulate.
+   */
+  async releaseProfile() {
+    const dir = this.profileDir
+    if (dir === null) return true
+    liveProfileDirs.delete(dir)
+    if (await removeProfileDir(dir, (type, msg) => this.note(type, msg))) {
+      this.profileDir = null
+      return true
+    }
+    profileCleanupBacklog.set(dir, profileCleanupBacklog.get(dir) ?? 0)
+    // Handles usually clear a moment after the browser dies: retry once off the
+    // stop path instead of leaving the directory for the next process.
+    const retry = setTimeout(() => void gcStaleProfiles(), PROFILE_REMOVE_ATTEMPTS * PROFILE_REMOVE_BACKOFF_MS * 2)
+    retry.unref?.()
+    return false
   }
 
   async dispose() {

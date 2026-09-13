@@ -2,6 +2,19 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.7.2] - 2026-09-13
+
+### Fixed
+
+- Browser profiles are no longer orphaned in the temp directory ([#6](https://github.com/guo6x/dsh-pilot/issues/6)). `stop()` swallowed a failed removal in an empty `catch` and forgot the path anyway, an unexpected browser exit never cleaned up at all, and a force-killed host left its profile behind forever. Removal now waits for the browser process, retries while Windows releases crashpad/GPU handles, reports a failure instead of hiding it, and keeps the path until the directory is confirmed gone.
+- Every launch sweeps the temp directory for abandoned `dsh-pilot-*` profiles: first whatever this process queued after a failed removal, then any profile older than an hour that no live launch owns. A directory name must match `mkdtemp`'s exact shape, so unrelated fixtures under the same prefix are never touched.
+- A browser that fails to spawn is handled (`child` `error`) instead of skipping profile cleanup.
+- A debugging port is chosen by binding it instead of probing it over HTTP, and a pilot only drives a browser whose endpoint reports that same port. A busy browser could miss the old 400 ms probe, which let a new pilot take an occupied port and drive another session's browser.
+
+### Tests
+
+- The smoke suite now asserts that a stopped browser's profile is gone, that an externally killed browser's profile is reclaimed, and that the start-up sweep removes a stale profile while leaving a fresh one and unrelated fixtures alone.
+
 ## [0.7.1] - 2026-08-25
 
 ### Changed
