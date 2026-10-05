@@ -1,7 +1,8 @@
 /**
  * dsh-pilot host plugin.
  *
- * Owns a pool of headless Edge/Chrome instances (one per agent session),
+ * Owns a pool of Edge/Chrome instances (one per agent session, headless by
+ * default with an opt-in visible window),
  * talks CDP over the native Node >= 22 WebSocket (zero runtime dependencies),
  * serves a loopback JSON/PNG API for the client cockpit panel, and registers
  * pilot_* tools for the agent.
@@ -207,7 +208,7 @@ export class Cdp {
   }
 }
 
-/** One headless browser session: launch, CDP page target, page operations. */
+/** One browser session (headless by default): launch, CDP page target, page operations. */
 export class Pilot {
   constructor(options = {}) {
     this.status = 'stopped' // stopped | starting | ready | error
@@ -225,6 +226,14 @@ export class Pilot {
     this.stopping = false
     this.lastUsedAt = Date.now()
     this.edgePath = options.edgePath ?? null
+    // Headless by default: automated runs open browsers in bursts and must not
+    // pop windows or steal focus. Set DSH_PILOT_HEADED=1, pass headed: true, or
+    // put headed: true in the plugin row config to watch a real window; GPU
+    // acceleration stays on in that mode.
+    const envHeaded = process.env.DSH_PILOT_HEADED
+    this.headed = options.headed ?? (envHeaded === undefined ? false : !['', '0', 'false'].includes(envHeaded.trim().toLowerCase()))
+    this.windowWidth = options.windowWidth ?? 1440
+    this.windowHeight = options.windowHeight ?? 900
     this.lastSnapshot = null // descriptors of the previous snapshot, for diffs
   }
 
@@ -285,16 +294,21 @@ export class Pilot {
     this.profileDir = await mkdtemp(join(tmpdir(), PROFILE_PREFIX))
     liveProfileDirs.add(this.profileDir)
     const argv = [
-      '--headless=new',
-      '--disable-gpu',
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${this.profileDir}`,
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-features=Translate',
-      'about:blank',
     ]
-    this.child = spawn(edge, argv, { stdio: 'ignore', windowsHide: true })
+    if (this.headed) {
+      // A real, movable OS window the user can watch and drag; the size is only
+      // the initial hint and the browser is never pinned to the DSH window.
+      argv.push(`--window-size=${this.windowWidth},${this.windowHeight}`)
+    } else {
+      argv.push('--headless=new', '--disable-gpu')
+    }
+    argv.push('about:blank')
+    this.child = spawn(edge, argv, { stdio: 'ignore', windowsHide: !this.headed })
     this.child.once('exit', (code, signal) => {
       const wasStopping = this.stopping
       this.child = null
@@ -913,7 +927,8 @@ export class Pilot {
 
 /** Session-keyed browser pool: one Pilot per agent session, LRU-capped. */
 export class PilotPool {
-  constructor() {
+  constructor(pilotOptions = {}) {
+    this.pilotOptions = pilotOptions
     this.pilots = new Map()
     this.primary = null
     this.panelSession = null
@@ -922,7 +937,7 @@ export class PilotPool {
   for(sessionKey) {
     let pilot = this.pilots.get(sessionKey)
     if (pilot === undefined) {
-      pilot = new Pilot()
+      pilot = new Pilot(this.pilotOptions)
       this.pilots.set(sessionKey, pilot)
       this.gc()
     }
@@ -1105,7 +1120,15 @@ export async function saveScreenshot(pilot, path) {
 }
 
 export function apply(ctx) {
-  const pool = new PilotPool()
+  // Optional row config (`config: { headed, windowWidth, windowHeight }`).
+  // DSH_PILOT_HEADED alone is enough to flip the window mode; the config keys
+  // are read defensively so a missing or malformed config changes nothing.
+  const rowConfig = typeof ctx?.config === 'object' && ctx.config !== null ? ctx.config : {}
+  const pool = new PilotPool({
+    headed: typeof rowConfig.headed === 'boolean' ? rowConfig.headed : undefined,
+    windowWidth: Number.isFinite(rowConfig.windowWidth) ? rowConfig.windowWidth : undefined,
+    windowHeight: Number.isFinite(rowConfig.windowHeight) ? rowConfig.windowHeight : undefined,
+  })
 
   // ---- loopback HTTP API for the cockpit panel (shows the most recent pilot) ----
   const webServer = ctx.webServer

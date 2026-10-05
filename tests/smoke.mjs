@@ -20,18 +20,42 @@ const check = (label, condition, extra = '') => {
 }
 
 const pilot = new Pilot()
+let fixtureServer = null
+let fixtureBase = ''
 let formServer = null
 let formBase = ''
 let uploadFixture = null
 try {
-  const snapshot = await pilot.navigate('https://example.com')
+  // Text and element assertions run against a local fixture. A public page's
+  // wording, language and availability are not ours to depend on: example.com
+  // replaced its copy in October 2026 and every text assertion broke at once.
+  fixtureServer = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    res.end('<!doctype html><title>Pilot fixture</title><h1>Pilot fixture</h1><p id="body-text">pilot fixture body text</p><a href="/second">second page</a>')
+  })
+  fixtureServer.listen(0, '127.0.0.1')
+  await once(fixtureServer, 'listening')
+  fixtureBase = `http://127.0.0.1:${fixtureServer.address().port}`
+
+  const fixtureSnap = await pilot.navigate(`${fixtureBase}/`)
   check('navigate: status ready', pilot.status === 'ready')
-  check('navigate: url', snapshot.url === 'https://example.com/', snapshot.url)
-  check('navigate: title', /Example/i.test(snapshot.title), snapshot.title)
-  check('navigate: has body text', snapshot.text.includes('Example Domain'))
-  check('navigate: numbered elements', Array.isArray(snapshot.elements) && snapshot.elements.length > 0, `${snapshot.elements.length} elements`)
-  check('navigate: first element ref is 1', snapshot.elements[0].ref === 1)
-  check('snapshot: no baseline on first snapshot', snapshot.changed === null)
+  check('navigate: url', fixtureSnap.url === `${fixtureBase}/`, fixtureSnap.url)
+  check('navigate: title', fixtureSnap.title === 'Pilot fixture', fixtureSnap.title)
+  check('navigate: has body text', fixtureSnap.text.includes('pilot fixture body text'))
+  check('navigate: numbered elements', Array.isArray(fixtureSnap.elements) && fixtureSnap.elements.length > 0, `${fixtureSnap.elements.length} elements`)
+  check('navigate: first element ref is 1', fixtureSnap.elements[0].ref === 1)
+  check('snapshot: no baseline on first snapshot', fixtureSnap.changed === null)
+
+  const waitForText = await pilot.waitFor({ text: 'pilot fixture body text', timeoutMs: 2000 })
+  check('waitFor: matches visible text', waitForText.ok === true && waitForText.textMatched === true, JSON.stringify(waitForText))
+
+  const timedOut = await pilot.waitFor({ text: 'this text is not on the fixture page', timeoutMs: 100 })
+  check('waitFor: reports a timeout', timedOut.ok === false && /timed out/.test(timedOut.error), JSON.stringify(timedOut))
+
+  // Real-site navigation semantics (click, back, reload, selector matching) still
+  // run against a public page; only its wording is off limits.
+  const snapshot = await pilot.navigate('https://example.com')
+  check('navigate: external page loads', pilot.status === 'ready' && /example\.com/.test(snapshot.url), snapshot.url)
 
   const learnMore = snapshot.elements.find(el => el.href.includes('iana.org'))
   check('elements: href captured', learnMore !== undefined)
@@ -53,14 +77,9 @@ try {
   const waited = await pilot.wait(150)
   check('wait: ok', waited.ok === true && waited.waited === 150, JSON.stringify(waited))
 
-  const waitForText = await pilot.waitFor({ text: 'Example Domain', timeoutMs: 1000 })
-  check('waitFor: matches visible text', waitForText.ok === true && waitForText.textMatched === true, JSON.stringify(waitForText))
-
   const asserted = await pilot.assert({ selector: 'a[href*="iana.org"]', urlIncludes: 'example.com' })
   check('assert: matches selector and url', asserted.ok === true && asserted.selectorMatched && asserted.urlMatched, JSON.stringify(asserted))
 
-  const timedOut = await pilot.waitFor({ text: 'this text is not on example.com', timeoutMs: 100 })
-  check('waitFor: reports a timeout', timedOut.ok === false && /timed out/.test(timedOut.error), JSON.stringify(timedOut))
 
   // A real local form exercises label-driven fill and CDP file upload end-to-end.
   formServer = createServer((_req, res) => {
@@ -131,6 +150,7 @@ try {
   console.error('FATAL', error)
 } finally {
   await pilot.dispose()
+  if (fixtureServer !== null) await new Promise(resolve => fixtureServer.close(resolve))
   if (formServer !== null) await new Promise(resolve => formServer.close(resolve))
   if (uploadFixture !== null) await rm(uploadFixture, { force: true })
 }
@@ -249,6 +269,40 @@ const killTree = async pilot => {
   } catch (error) {
     failed++
     console.error('FATAL sweep', error)
+  }
+}
+
+// ---- window mode: headless by default, headed on request ----
+{
+  const restore = process.env.DSH_PILOT_HEADED
+  try {
+    const cases = [
+      [undefined, undefined, false, 'default is headless'],
+      [{ headed: true }, undefined, true, 'explicit headed'],
+      [{ headed: false }, '1', false, 'explicit headless beats the env var'],
+      [{}, '1', true, 'env var turns headed on'],
+      [{}, 'true', true, 'env var accepts true'],
+      [{}, '  TRUE  ', true, 'env var is trimmed and case-insensitive'],
+      [{}, '0', false, 'env var accepts 0'],
+      [{}, 'false', false, 'env var accepts false'],
+      [{}, '', false, 'empty env var stays headless'],
+    ]
+    for (const [options, env, expected, label] of cases) {
+      if (env === undefined) delete process.env.DSH_PILOT_HEADED
+      else process.env.DSH_PILOT_HEADED = env
+      const pilot = new Pilot(options)
+      check(`window mode: ${label}`, pilot.headed === expected, `headed=${pilot.headed}`)
+    }
+    const sized = new Pilot({ headed: true, windowWidth: 1280, windowHeight: 720 })
+    check('window mode: explicit size is kept', sized.windowWidth === 1280 && sized.windowHeight === 720)
+    const pooled = new PilotPool({ headed: true })
+    check('window mode: pool forwards pilot options', pooled.for('headed-session').headed === true)
+  } catch (error) {
+    failed++
+    console.error('FATAL window mode', error)
+  } finally {
+    if (restore === undefined) delete process.env.DSH_PILOT_HEADED
+    else process.env.DSH_PILOT_HEADED = restore
   }
 }
 

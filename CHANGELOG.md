@@ -2,6 +2,20 @@
 
 All notable changes to dsh-pilot. Versions follow the running history of the GitHub repo; installs pin to `master` (or a specific version once npm publishing is enabled).
 
+## [0.7.3] - 2026-10-05
+
+### Added
+
+- Opt-in visible browser window: `DSH_PILOT_HEADED=1`, `new Pilot({ headed: true })`, or `config: { headed: true }` on the plugin row opens a real, movable Edge/Chrome window (`--window-size`, GPU on) instead of the headless default, so the page the agent is driving can be watched and dragged directly. Headless stays the default because automated runs open browsers in bursts (a matrix run would otherwise pop one window per route).
+- `windowWidth` / `windowHeight` (default 1440x900) set the initial size of that window.
+
+Idea from @im4ever's fork, which shipped headed-by-default; this version keeps headless as the default and makes the mode switchable instead.
+
+### Tests
+
+- Text and element assertions now run against a local fixture page instead of example.com, which replaced its copy in October 2026 and broke every text assertion at once. Real-site navigation semantics (click, back, reload, selector matching) still run against a public page.
+- Window mode is covered: default headless, explicit option, env-var parsing (trimmed, case-insensitive, empty means headless), size overrides, and pool pass-through.
+
 ## [0.7.2] - 2026-09-13
 
 ### Fixed
