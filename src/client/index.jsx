@@ -9,6 +9,60 @@ export const inject = ['slots']
 
 const POLL_MS = 2000
 
+/**
+ * i18n for the bundled cockpit. The client runs in the browser via the web
+ * app's ModuleLoader — cordis/i18n are not available here, so we ship a small
+ * self-contained map keyed per-locale. Every visible string is stored under
+ * both `en` and `zh`; Chinese literals stay verbatim in `zh`, never translated.
+ */
+const STRINGS = {
+  en: {
+    cockpit: "Browser cockpit",
+    sessionTip: "Pick the session to watch in the cockpit; 'Most recently active' follows the agent automatically",
+    latest: "Most recently active",
+    collapse: "Collapse",
+    starting: "Browser starting...",
+    notStarted: "Not started - click 'Start browser' below",
+    startBtn: "Start browser",
+    startShort: "\u25B6 Start",
+    stopBtn: "Stop browser",
+    stopShort: "\u25A0 Stop",
+    addrTip: "Address bar",
+    go: "Go"
+  },
+  zh: {
+    cockpit: "\u6D4F\u89C8\u5668\u9A7E\u9A76\u8231",
+    sessionTip: "\u9009\u62E9\u8981\u5728\u9A7E\u9A76\u8231\u4E2D\u67E5\u770B\u7684\u4F1A\u8BDD\uFF1B\u201C\u6700\u8FD1\u6D3B\u8DC3\u201D\u4F1A\u81EA\u52A8\u8DDF\u968F agent",
+    latest: "\u6700\u8FD1\u6D3B\u8DC3",
+    collapse: "\u6536\u8D77",
+    starting: "\u6D4F\u89C8\u5668\u542F\u52A8\u4E2D\u2026",
+    notStarted: "\u672A\u542F\u52A8\uFF0C\u70B9\u4E0B\u65B9\u300C\u542F\u52A8\u6D4F\u89C8\u5668\u300D",
+    startBtn: "\u542F\u52A8\u6D4F\u89C8\u5668",
+    startShort: "\u25B6 \u542F\u52A8",
+    stopBtn: "\u5173\u95ED\u6D4F\u89C8\u5668",
+    stopShort: "\u25A0 \u5173\u95ED",
+    addrTip: "\u5730\u5740\u680F",
+    go: "\u524D\u5F80"
+  }
+}
+
+/** Current locale: `window.dsh.locale` if present, else navigator.language, else 'en'. */
+function getLocale() {
+  try {
+    const p = (typeof window !== 'undefined' && window.dsh && window.dsh.locale) || '';
+    if (/^zh/i.test(p)) return 'zh';
+  } catch {}
+  try {
+    if (/^zh/i.test(navigator.language)) return 'zh';
+  } catch {}
+  return 'en';
+}
+
+/** Resolve a string key for the current locale, falling back to English. */
+function t(key) {
+  return STRINGS[getLocale()][key] || STRINGS.en[key];
+}
+
 /** Tiny module store so the sidebar button and the overlay share open state. */
 const store = { open: false, listeners: new Set() }
 function setOpen(open) {
@@ -139,18 +193,18 @@ function PilotPanel() {
 
   return React.createElement('div', { style, onPointerDown },
     React.createElement('div', { style: barStyle },
-      React.createElement('span', { style: { fontSize: 16, lineHeight: 1, whiteSpace: 'nowrap' }, title: '浏览器驾驶舱' }, '🛩️'),
+      React.createElement('span', { style: { fontSize: 16, lineHeight: 1, whiteSpace: 'nowrap' }, title: t('cockpit') }, '🛩️'),
       React.createElement('span', { style: { flex: 1 } }),
       state?.sessionOptions?.length > 1
         ? React.createElement('select', {
             style: { width: 160, minWidth: 0, background: 'rgba(255,255,255,0.08)', color: '#e8eaf0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 5, padding: '3px 5px', fontSize: 11 },
             value: state.selectedSession ?? 'latest',
             disabled: busy,
-            title: '选择要在驾驶舱中查看的会话；“最近活跃”会自动跟随 agent',
+            title: t('sessionTip'),
             onPointerDown: event => event.stopPropagation(),
             onChange: event => run('select-session', { session: event.target.value }),
           }, [
-            React.createElement('option', { key: 'latest', value: 'latest' }, '最近活跃'),
+            React.createElement('option', { key: 'latest', value: 'latest' }, t('latest')),
             ...state.sessionOptions.map(option => React.createElement(
               'option',
               { key: option.id, value: option.id },
@@ -159,26 +213,26 @@ function PilotPanel() {
           ])
         : null,
       React.createElement('span', { style: { fontSize: 11, opacity: 0.7 } }, state?.status ?? '…'),
-      React.createElement('button', { style: btnStyle, onClick: () => setOpen(false), title: '收起' }, '×'),
+      React.createElement('button', { style: btnStyle, onClick: () => setOpen(false), title: t('collapse') }, '×'),
     ),
     React.createElement('div', { style: shotWrapStyle },
       state?.status === 'ready' && tick > 0
         ? React.createElement('img', { src: `/dsh-pilot/shot.png?t=${tick}`, style: shotStyle, draggable: false })
         : React.createElement('span', { style: { fontSize: 12, opacity: 0.55 } },
-            state?.status === 'starting' ? '浏览器启动中…' : '未启动，点下方「启动浏览器」'),
+            state?.status === 'starting' ? t('starting') : t('notStarted')),
     ),
     React.createElement('div', { style: { padding: '8px 10px', display: 'flex', gap: 6, flexWrap: 'wrap' } },
-      React.createElement('button', { style: btnStyle, disabled: busy, title: '启动浏览器', onClick: () => run('start') }, '▶ 启动'),
-      React.createElement('button', { style: btnStyle, disabled: busy, title: '关闭浏览器', onClick: () => run('stop') }, '■ 关闭'),
+      React.createElement('button', { style: btnStyle, disabled: busy, title: t('startBtn'), onClick: () => run('start') }, t('startShort')),
+      React.createElement('button', { style: btnStyle, disabled: busy, title: t('stopBtn'), onClick: () => run('stop') }, t('stopShort')),
       React.createElement('input', {
         style: { flex: 1, minWidth: 120, background: 'rgba(255,255,255,0.08)', color: '#e8eaf0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: '4px 8px', fontSize: 12 },
         placeholder: 'https://…',
-        title: '地址栏',
+        title: t('addrTip'),
         value: navUrl,
         onChange: event => setNavUrl(event.target.value),
         onKeyDown: event => { if (event.key === 'Enter') run('navigate', { url: navUrl }) },
       }),
-      React.createElement('button', { style: btnStyle, disabled: busy || !/^https?:\/\//.test(navUrl), title: '前往', onClick: () => run('navigate', { url: navUrl }) }, '前往'),
+      React.createElement('button', { style: btnStyle, disabled: busy || !/^https?:\/\//.test(navUrl), title: t('go'), onClick: () => run('navigate', { url: navUrl }) }, t('go')),
     ),
     state?.title || state?.url
       ? React.createElement('div', { style: { padding: '0 10px 6px', fontSize: 11, opacity: 0.75, wordBreak: 'break-all' } },
@@ -194,7 +248,7 @@ function PilotPanel() {
 function PilotButton() {
   const [open, openSet] = useOpen()
   return React.createElement('button', {
-    title: '浏览器驾驶舱',
+    title: t('cockpit'),
     style: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 4 },
     onClick: () => openSet(!open),
   }, open ? '🛩️' : '✈️')
@@ -204,11 +258,11 @@ export function apply(ctx) {
   const slots = ctx.slots
   if (slots === undefined) return
   slots.inject('sidebar.footer.action', () => slots.register(
-    { name: 'sidebar.footer.action', id: 'dsh-pilot', order: 900, label: '浏览器驾驶舱' },
+    { name: 'sidebar.footer.action', id: 'dsh-pilot', order: 900, label: t('cockpit') },
     () => React.createElement(PilotButton),
   ))
   slots.inject('shell.overlay', () => slots.register(
-    { name: 'shell.overlay', id: 'dsh-pilot-panel', order: 200, label: '浏览器驾驶舱' },
+    { name: 'shell.overlay', id: 'dsh-pilot-panel', order: 200, label: t('cockpit') },
     () => React.createElement(PilotPanel),
   ))
 }
