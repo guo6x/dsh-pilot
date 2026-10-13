@@ -1119,11 +1119,11 @@ export async function saveScreenshot(pilot, path) {
   return { ok: true, path, bytes: shot.length }
 }
 
-export function apply(ctx) {
+export function apply(ctx, config) {
   // Optional row config (`config: { headed, windowWidth, windowHeight }`).
-  // DSH_PILOT_HEADED alone is enough to flip the window mode; the config keys
-  // are read defensively so a missing or malformed config changes nothing.
-  const rowConfig = typeof ctx?.config === 'object' && ctx.config !== null ? ctx.config : {}
+  // The cordis 4.0.4 context proxy may not carry the row on ctx itself, so we
+  // read defensively from both: config wins when present, otherwise ctx.config.
+  const rowConfig = typeof config === 'object' && config !== null ? config : (typeof ctx?.config === 'object' && ctx.config !== null ? ctx.config : {})
   const pool = new PilotPool({
     headed: typeof rowConfig.headed === 'boolean' ? rowConfig.headed : undefined,
     windowWidth: Number.isFinite(rowConfig.windowWidth) ? rowConfig.windowWidth : undefined,
